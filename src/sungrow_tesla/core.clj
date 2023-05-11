@@ -93,9 +93,11 @@
           data (get json "result_data")]
       (if (nil? data)
         (throw (ex-info
-                "authentication failure"
+                "Failed to retrieve Sungrow data; not logged in"
                 {:type :err-sungrow-not-logged-in}))
         data))
+    (catch clojure.lang.ExceptionInfo e
+      (throw e))
     (catch Exception e
       (throw (ex-info
               (str "Failed to retrieve Sungrow data; " (.getMessage e))
@@ -234,55 +236,61 @@
         new-charge-amps (limit (int (Math/round (+ tesla-charge-amps adjustment-amps))) 0 tesla-max-amps)]
     new-charge-amps))
 
+; TODO: 
+; - run-program performs side-effects and returns new state
+; - status message
+; - login to sungrow error
+
 (defn run-program
   "Executes actions based on current program state, returning the new state"
   [state]
   (try
     (lazy-let [latest-data-point (get-latest-data-point (:time state))
-          tesla-vin (get env "TESLA_VIN")
-          tessie-token (get env "TESSIE_ACCESS_TOKEN")
-          tesla-state (get-tesla-state tesla-vin tessie-token)
-          tesla-max-amps (get-tesla-max-amps tesla-state)
-          tesla-charge-amps (get-tesla-charge-amps tesla-state)
-          charger-geoboundary (get-charger-geoboundary)
-          grid-sensor-device-id (get env "GRID_SENSOR_DEVICE_ID")
-          grid-power-data-point-id (get env "GRID_POWER_DATA_POINT_ID")
-          power-safety-buffer-watts (Float/parseFloat (get env "POWER_SAFETY_BUFFER_WATTS"))
-          max-adjustment-amps (Float/parseFloat (get env "MAX_ADJUSTMENT_AMPS"))
-          power-to-grid-watts (get-sungrow-power-to-grid (:token state) latest-data-point grid-sensor-device-id grid-power-data-point-id)
-          new-charge-amps (calc-new-charge-amps power-to-grid-watts power-safety-buffer-watts tesla-charge-amps max-adjustment-amps tesla-max-amps)]
-      (cond
-        (not (has-fresh-data-point? state))
-        state
+               tesla-vin (get env "TESLA_VIN")
+               tessie-token (get env "TESSIE_ACCESS_TOKEN")
+               tesla-state (get-tesla-state tesla-vin tessie-token)
+               tesla-max-amps (get-tesla-max-amps tesla-state)
+               tesla-charge-amps (get-tesla-charge-amps tesla-state)
+               charger-geoboundary (get-charger-geoboundary)
+               grid-sensor-device-id (get env "GRID_SENSOR_DEVICE_ID")
+               grid-power-data-point-id (get env "GRID_POWER_DATA_POINT_ID")
+               power-safety-buffer-watts (Float/parseFloat (get env "POWER_SAFETY_BUFFER_WATTS"))
+               max-adjustment-amps (Float/parseFloat (get env "MAX_ADJUSTMENT_AMPS"))
+               power-to-grid-watts (get-sungrow-power-to-grid (:token state) latest-data-point grid-sensor-device-id grid-power-data-point-id)
+               new-charge-amps (calc-new-charge-amps power-to-grid-watts power-safety-buffer-watts tesla-charge-amps max-adjustment-amps tesla-max-amps)]
+              (cond
+                (not (has-fresh-data-point? state))
+                state
 
-        (not (is-tesla-at-office? tesla-state charger-geoboundary))
-        (assoc state :message "Tesla is not at the NQE office" :delay 60000)
+                (not (is-tesla-at-office? tesla-state charger-geoboundary))
+                (assoc state :message "Tesla is not at the NQE office" :delay 60000)
 
-        (not (is-tesla-charging? tesla-state))
-        (do
-          (update-tesla-charge-amps tesla-max-amps tesla-vin tessie-token)
-          (assoc state :message "Tesla is not charging" :delay 10000))
+                (not (is-tesla-charging? tesla-state))
+                (do
+                  (update-tesla-charge-amps tesla-max-amps tesla-vin tessie-token)
+                  (assoc state :message "Tesla is not charging" :delay 10000))
 
-        (just-started-charging? state)
-        (do
-          (update-tesla-charge-amps 0 tesla-vin tessie-token)
-          (assoc state :message "Tesla connected; started charging at 0A" :last-data-point-handled latest-data-point))
+                (just-started-charging? state)
+                (do
+                  (update-tesla-charge-amps 0 tesla-vin tessie-token)
+                  (assoc state :message "Tesla connected; started charging at 0A" :last-data-point-handled latest-data-point))
 
-        (nil? power-to-grid-watts)
-        state
+                (nil? power-to-grid-watts)
+                (assoc state :delay 5000)
 
-        :default
-        (do
-          (update-tesla-charge-amps new-charge-amps tesla-vin tessie-token)
-          (assoc state :message (format "Tesla will charge at %.2fA and consume %.2fW%n" new-charge-amps (* new-charge-amps 687.5)) :last-data-point-handled latest-data-point))
-        ))
+                :else
+                (do
+                  (update-tesla-charge-amps new-charge-amps tesla-vin tessie-token)
+                  (assoc state :message (format "Tesla will charge at %dA and consume %.2fW%n" new-charge-amps (* new-charge-amps 687.5)) :last-data-point-handled latest-data-point))))
 
     (catch clojure.lang.ExceptionInfo e
       (case (:type (ex-data e))
-        :err-could-not-get-sungrow-data (assoc state :message (ex-message e) :token (login-to-sungrow (get env "SUNGROW_USERNAME") (get env "SUNGROW_PASSWORD")))
+        :err-could-not-get-sungrow-data (assoc state :message (ex-message e))
         :err-could-not-set-charge-amps (assoc state :message (ex-message e) :last-data-point-handled nil)
         :err-could-not-get-tesla-state (assoc state :message (ex-message e))
-        :err-sungrow-not-logged-in (assoc state :token nil :message (ex-message e))
+        :err-sungrow-not-logged-in (assoc state 
+                                          :token (login-to-sungrow (get env "SUNGROW_USERNAME") (get env "SUNGROW_PASSWORD")) 
+                                          :message "Logged in to Sungrow")
         :err-could-not-login-to-sungrow (throw e)
         (throw e)))))
 
