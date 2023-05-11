@@ -12,6 +12,32 @@ FIXME: explanation
 
     $ java -jar sungrow-tesla-0.1.0-standalone.jar [args]
 
+### Environment
+```bash
+# Sungrow
+SUNGROW_USERNAME=
+SUNGROW_PASSWORD=
+# Tessie
+TESSIE_ACCESS_TOKEN=
+TESLA_VIN=
+# Always maintain at least this amount of power going to the grid
+POWER_SAFETY_BUFFER_WATTS=
+# Maximum amount the Tesla charge speed can change at any one time
+# (Integer only)
+MAX_ADJUSTMENT_AMPS=
+# Square geological boundary around the charger; Tesla will only
+# charge while it is within this boundary
+# Latitudinal boundaries
+CHARGER_BOUNDARY_NORTH=
+CHARGER_BOUNDARY_SOUTH=
+# Longitudinal boundaries
+CHARGER_BOUNDARY_WEST=
+CHARGER_BOUNDARY_EAST=
+# System-specific Sungrow API information
+GRID_SENSOR_DEVICE_ID=
+GRID_POWER_DATA_POINT_ID=
+```
+
 ## Options
 
 FIXME: listing of options this app accepts.
