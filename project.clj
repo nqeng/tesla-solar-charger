@@ -7,7 +7,7 @@
                  [org.clojure/clojure "1.11.1"]
                  [clj-http "3.12.3"]
                  [cheshire "5.11.0"]
-                 [com.lambdaisland/dotenv "0.2.5"]
+                 [lynxeyes/dotenv "1.1.0"]
                  ]
   :main ^:skip-aot sungrow-tesla.core
   :target-path "target/%s"

@@ -14,28 +14,28 @@ FIXME: explanation
 
 ### Environment
 ```bash
-# Sungrow
+# Auth
 SUNGROW_USERNAME=
 SUNGROW_PASSWORD=
-# Tessie
-TESSIE_ACCESS_TOKEN=
+TESSIE_TOKEN=
 TESLA_VIN=
-# Always maintain at least this amount of power going to the grid
-POWER_SAFETY_BUFFER_WATTS=
-# Maximum amount the Tesla charge speed can change at any one time
-# (Integer only)
-MAX_ADJUSTMENT_AMPS=
-# Square geological boundary around the charger; Tesla will only
-# charge while it is within this boundary
-# Latitudinal boundaries
-CHARGER_BOUNDARY_NORTH=
-CHARGER_BOUNDARY_SOUTH=
-# Longitudinal boundaries
-CHARGER_BOUNDARY_WEST=
-CHARGER_BOUNDARY_EAST=
-# System-specific Sungrow API information
+# Tuning
+# Always maintains at least this amount of power going to the grid
+POWER_BUFFER_WATTS=
+# Max amount charge speed can climb at any one time
+MAX_CLIMB_AMPS=
+# Max amount charge speed can drop at any one time
+MAX_DROP_AMPS=
+# Latitude/Longitude boundaries of a square geographic 
+# "fence" around the charger. Includes north, south,
+# east, and west boundaries.
+CHARGER_GEOFENCE_NORTH=
+CHARGER_GEOFENCE_SOUTH=
+CHARGER_GEOFENCE_WEST=
+CHARGER_GEOFENCE_EAST=
+# Sungrow inverter-specific IDs
 GRID_SENSOR_DEVICE_ID=
-GRID_POWER_DATA_POINT_ID=
+GRID_POWER_DATA_ID=
 ```
 
 ## Options
