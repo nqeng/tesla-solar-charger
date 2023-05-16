@@ -38,6 +38,7 @@
   (java.time.LocalDateTime/now))
 
 (defn has-tesla-been-charging?
+  "If a data point has been processed, the Tesla has been charging."
   [program-state]
   (not (nil? (:last-data-point-timestamp program-state))))
 
@@ -91,7 +92,8 @@
    current-charge-amps
    battery-level
    power-buffer-watts]
-  (format "Data point time: %s
+  (format "
+Data point timestamp: %s
 Power feeding to grid: %.2fW
 Power available to Tesla: %.2fW
 Tesla charge speed: %dA (%s%dA)
@@ -103,7 +105,7 @@ Battery level: %d%%"
           new-charge-amps
           (if (pos? (- new-charge-amps current-charge-amps)) "+" "-")
           (abs (- new-charge-amps current-charge-amps))
-          (* new-charge-amps 687.5)
+          (* new-charge-amps power-to-current-3-phase)
           battery-level))
 
 (defn is-charge-overridden?
@@ -122,68 +124,70 @@ Battery level: %d%%"
       tesla-battery-level (tesla/get-battery-level tesla-state)
       power-to-grid-watts (sungrow/get-power-to-grid (:sungrow-token state) data-timestamp)
       new-charge-amps (calc-new-charge-amps power-to-grid-watts tesla-charge-amps tesla-max-amps)]
-      (cond
-        (not (tesla/is-tesla-near-charger? tesla-state))
-        (assoc state
-               :message "Tesla is not at the NQE office"
-               :delay 60000)
-        ; Tesla is not charging and has been charging previously,
+     (cond
+       (not (tesla/is-tesla-near-charger? tesla-state))
+       (assoc state
+              :message "Tesla is not at the NQE office"
+              :delay 60000)
+        ; If Tesla is not charging and has been charging previously,
         ; wait
-        (tesla-just-disconnected? state tesla-state)
-        (assoc state
-               :message "Tesla disconnected; reset charge amps to max"
-               :delay 10000
-               :last-data-point-timestamp nil
-               :new-charge-amps (tesla/get-max-amps tesla-state))
+       (tesla-just-disconnected? state tesla-state)
+       (assoc state
+              :message "Tesla disconnected; reset charge amps to max"
+              :delay 10000
+              :last-data-point-timestamp nil
+              :new-charge-amps (tesla/get-max-amps tesla-state))
         ; If Tesla is not charging and hasn't been charging previously,
         ; wait
-        (not (tesla/is-tesla-charging? tesla-state))
-        (assoc state
-               :message "Tesla is not charging"
-               :delay 5000)
+       (not (tesla/is-tesla-charging? tesla-state))
+       (assoc state
+              :message "Tesla is not charging"
+              :delay 5000)
         ; If max charge speed override is in place
-        (is-charge-overridden? tesla-state)
-        (assoc state
-               :message (str "Charge speed overridden; charging at " tesla-max-amps "A")
-               :last-data-point-timestamp data-timestamp
-               :new-charge-amps tesla-max-amps)
+       (is-charge-overridden? tesla-state)
+       (assoc state
+              :message (str "Charge speed overridden; charging at " tesla-max-amps "A")
+              :last-data-point-timestamp data-timestamp
+              :new-charge-amps tesla-max-amps)
         ; If Tesla is charging and hasn't been charging previously,
         ; begin charging at zero amps
-        (tesla-just-connected? state tesla-state)
-        (assoc state
-               :message "Tesla connected; started charging at 0A"
-               :last-data-point-timestamp data-timestamp
-               :new-charge-amps 0)
+       (tesla-just-connected? state tesla-state)
+       (assoc state
+              :message "Tesla connected; started charging at 0A"
+              :last-data-point-timestamp data-timestamp
+              :new-charge-amps 0)
         ; If it's not the time to receive a fresh data point, wait
-        (not (sungrow/has-fresh-data-point? state))
-        state
+       (not (sungrow/has-fresh-data-point? (:time state) (:last-data-point-timestamp state)))
+       (assoc state
+              :message nil)
         ; If data point hasn't been populated yet, wait
-        (nil? power-to-grid-watts)
-        (assoc state
-               :delay 40000)
+       (nil? power-to-grid-watts)
+       (assoc state
+              :message "Null data point; waiting for data"
+              :delay 40000)
         ; If charge amps haven't changed, don't update Tesla
-        (= new-charge-amps tesla-charge-amps)
-        (assoc state
-               :message (create-status-message
-                         data-timestamp
-                         power-to-grid-watts
-                         new-charge-amps
-                         tesla-charge-amps
-                         tesla-battery-level
-                         (Float/parseFloat (env "POWER_BUFFER_WATTS")))
-               :last-data-point-timestamp data-timestamp)
+       (= new-charge-amps tesla-charge-amps)
+       (assoc state
+              :message (create-status-message
+                        data-timestamp
+                        power-to-grid-watts
+                        new-charge-amps
+                        tesla-charge-amps
+                        tesla-battery-level
+                        (Float/parseFloat (env "POWER_BUFFER_WATTS")))
+              :last-data-point-timestamp data-timestamp)
         ; All good
-        :else
-        (assoc state
-               :message (create-status-message
-                         data-timestamp
-                         power-to-grid-watts
-                         new-charge-amps
-                         tesla-charge-amps
-                         tesla-battery-level
-                         (Float/parseFloat (env "POWER_BUFFER_WATTS")))
-               :last-data-point-timestamp data-timestamp
-               :new-charge-amps new-charge-amps)))
+       :else
+       (assoc state
+              :message (create-status-message
+                        data-timestamp
+                        power-to-grid-watts
+                        new-charge-amps
+                        tesla-charge-amps
+                        tesla-battery-level
+                        (Float/parseFloat (env "POWER_BUFFER_WATTS")))
+              :last-data-point-timestamp data-timestamp
+              :new-charge-amps new-charge-amps)))
     (catch clojure.lang.ExceptionInfo e
       (case (:type (ex-data e))
         :err-could-not-get-sungrow-data (assoc state :message (ex-message e) :sungrow-token nil)
@@ -199,6 +203,15 @@ Battery level: %d%%"
                     :new-charge-amps nil
                     :sungrow-token (sungrow/login)})
 
+(defn log
+  [message]
+  (println
+   (format "[%s] %s"
+           (.format
+             (time-now)
+            (java.time.format.DateTimeFormatter/ofPattern "yyyy-MM-dd HH:mm:ss"))
+           message)))
+
 (defn -main
   [& args]
   (println "Starting...")
@@ -206,7 +219,7 @@ Battery level: %d%%"
     (let [new-state       (run-program state)
           sungrow-token   (:sungrow-token new-state)
           message         (:message new-state)
-          new-charge-amps (:new-charge-amps state)
+          new-charge-amps (:new-charge-amps new-state)
           delay           (:delay new-state)
           next-state      (assoc new-state
                                  :time (time-now)
@@ -220,7 +233,7 @@ Battery level: %d%%"
         (if new-charge-amps
           (tesla/update-charge-amps new-charge-amps))
         (if message
-          (println (str message "\n")))
+          (log message))
         (if delay
           (Thread/sleep delay))
         (catch clojure.lang.ExceptionInfo e

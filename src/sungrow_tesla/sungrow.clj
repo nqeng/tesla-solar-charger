@@ -35,10 +35,10 @@
       (format-datetime)))
 
 (defn has-fresh-data-point?
-  [program-state]
-  (-> (:time program-state)
+  [datetime last-data-point-timestamp]
+  (-> datetime
       (get-most-recent-data-timestamp)
-      (not= (:last-data-point-timestamp program-state))))
+      (not= last-data-point-timestamp)))
 
 (defn login
   "Sends a login request to Sungrow API, returning an auth token.
