@@ -59,19 +59,39 @@
                      {:type :err-could-not-login-to-sungrow}))))
          json (json/parse-string (:body response))
          login-state (get-in json ["result_data" "login_state"])
+         tries-left (get-in json ["result_data" "remain_times"])
+         error (get json "result_msg")
+         error-code (get json "result_code")
          user-id (get-in json ["result_data" "user_id"])
          token (get-in json ["result_data" "token"])]
-     (case login-state
-       "1" token
-       "2" (throw (ex-info
-                   (str "Sungrow login failed; too many failed attempts")
-                   {:type :err-too-many-failed-login-attempts}))
-       nil (throw (ex-info
-                   (str "Sungrow login failed; logging in too frequently")
-                   {:type :err-logging-in-too-frequently}))
+     (cond
+       (= "1" login-state)
+       token
+       (= "0" login-state)
        (throw (ex-info
-               (str "Sungrow login failed; an unknown error occurred")
+               (str "Sungrow login failed; authentication error (" tries-left " tries left)")
+               {:type :err-too-many-failed-login-attempts}))
+       (= "-1" login-state)
+       (throw (ex-info
+               "Sungrow login failed; invalid username"
+               {:type :err-too-many-failed-login-attempts}))
+       (= "2" login-state)
+       (throw (ex-info
+               "Sungrow login failed; too many failed attempts"
+               {:type :err-too-many-failed-login-attempts}))
+       (= "E916" error-code)
+       (throw (ex-info
+               "Sungrow login failed; Login too frequently"
+               {:type :err-login-too-frequently}))
+       (= "009" error-code)
+       (throw (ex-info
+               "Sungrow login failed; Username or password empty"
+               {:type :err-could-not-login-to-sungrow}))
+       :else
+       (throw (ex-info
+               (str "Sungrow login failed; " error)
                {:type :err-could-not-login-to-sungrow})))))
+
   ([]
    (login (env "SUNGROW_USERNAME") (env "SUNGROW_PASSWORD"))))
 

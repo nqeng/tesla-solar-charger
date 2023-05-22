@@ -192,29 +192,26 @@ Battery level: %d%%"
       (case (:type (ex-data e))
         :err-could-not-get-sungrow-data (assoc state :message (ex-message e) :sungrow-token nil)
         :err-could-not-get-tesla-state (assoc state :message (ex-message e))
-        :err-could-not-login-to-sungrow (throw e)
-        :err-too-many-failed-login-attempts (throw e)
-        :err-logging-in-too-frequently (assoc state :message (ex-message e) :delay 60000)
         (throw e)))))
 
 (def initial-state {:time (time-now)
                     :last-data-point-timestamp nil
                     :delay nil
                     :new-charge-amps nil
-                    :sungrow-token (sungrow/login)})
+                    :sungrow-token nil})
 
 (defn log
   [message]
   (println
    (format "[%s] %s"
            (.format
-             (time-now)
+            (time-now)
             (java.time.format.DateTimeFormatter/ofPattern "yyyy-MM-dd HH:mm:ss"))
            message)))
 
 (defn -main
   [& args]
-  (println "Starting...")
+  (log "Starting...")
   (loop [state initial-state]
     (let [new-state       (run-program state)
           sungrow-token   (:sungrow-token new-state)
