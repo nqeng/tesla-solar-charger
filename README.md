@@ -6,6 +6,7 @@ FIXME: description
 
 - Requires [Java 17](https://www.oracle.com/au/java/technologies/downloads/#java17)
 - Download the latest version from [releases](https://github.com/nqeng/tesla-solar-charger/releases)
+- Create a `.env` file in the directory that the program is to be run from
 
 ## Installation from source
 
@@ -13,13 +14,14 @@ FIXME: description
 - Requires [Clojure](https://clojure.org/guides/install_clojure)
 - Requires [Leiningen](https://leiningen.org/)
 - Clone this repo
+- Create a `.env` file
 - run `lein run` in the repo root folder
 
 ## Usage
 
 FIXME: explanation
 
-    $ java -jar sungrow-tesla-0.1.0-standalone.jar
+    $ java -jar sungrow-tesla-1.0.0-standalone.jar
 
 ## Options
 
