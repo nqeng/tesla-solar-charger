@@ -14,7 +14,7 @@ FIXME: description
 - Requires [Clojure](https://clojure.org/guides/install_clojure)
 - Requires [Leiningen](https://leiningen.org/)
 - Clone this repo
-- Create a `.env` file
+- Create a `.env` file in the project root directory
 - run `lein run` in the repo root folder
 
 ## Usage
@@ -44,16 +44,26 @@ MAX_CLIMB_AMPS=
 MAX_DROP_AMPS=
 # Square geological boundary around the charger; Tesla will only
 # charge while it is within this boundary
-# Latitudinal boundaries
 CHARGER_GEOFENCE_NORTH=
 CHARGER_GEOFENCE_SOUTH=
-# Longitudinal boundaries
 CHARGER_GEOFENCE_WEST=
 CHARGER_GEOFENCE_EAST=
 # System-specific Sungrow API information
 GRID_SENSOR_DEVICE_ID=
 GRID_POWER_DATA_ID=
 ```
+
+### Setting the Charger Geofence
+tesla-solar-charger uses geolocation to make sure the Tesla only charges when it is near the charger.
+To determine this, it requires the user to define a square geofence around the charger by providing 
+north, south, east, and west boundaries in the `.env` file.
+
+As an example, the charger geofence could be set to the four corners of the NQE office property:
+![](https://raw.githubusercontent.com/calebwebster/tesla-solar-charger/main/doc/nqeng_geofence_1.png)
+![](https://raw.githubusercontent.com/calebwebster/tesla-solar-charger/main/doc/nqeng_geofence_2.png)
+
+### Setting the Sungrow Data Information
+
 
 ## Modification
 
