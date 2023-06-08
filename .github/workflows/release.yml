@@ -45,7 +45,7 @@ jobs:
           lein uberjar
           echo "done!"
           echo $version
-          set version="2.0.0"
+          export version="2.0.0"
           echo $version
 
       - uses: "marvinpinto/action-automatic-releases@latest"
@@ -53,6 +53,6 @@ jobs:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
           automatic_release_tag: "1.0.0"
           prerelease: false
-          title: "1.0.0"
+          title: "$version"
           files: |
             repository/target/uberjar/*-standalone.jar
