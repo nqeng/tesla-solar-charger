@@ -8,7 +8,6 @@ FIXME: description
 - Download the latest version from [releases](https://github.com/nqeng/tesla-solar-charger/releases)
 - Create a `.env` file in the directory that the program is to be run from
 
-
 ## Installation from source
 
 - Requires [Java 17](https://www.oracle.com/au/java/technologies/downloads/#java17)
