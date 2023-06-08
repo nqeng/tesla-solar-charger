@@ -53,6 +53,6 @@ jobs:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
           automatic_release_tag: "1.0.0"
           prerelease: false
-          title: "$version"
+          title: "Release $version"
           files: |
             repository/target/uberjar/*-standalone.jar
