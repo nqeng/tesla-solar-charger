@@ -15,9 +15,10 @@ jobs:
   pre-release:
     name: "Pre Release"
     runs-on: "ubuntu-latest"
+    env:
+        version: "1.0.0"
 
     steps:
-      # ...
       - uses: actions/checkout@v3
         with:
           path: "repository"
@@ -43,6 +44,9 @@ jobs:
           ls -l
           lein uberjar
           echo "done!"
+          echo $version
+          set version="2.0.0"
+          echo $version
 
       - uses: "marvinpinto/action-automatic-releases@latest"
         with:
