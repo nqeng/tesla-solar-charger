@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
   push:
     tags:
-      - something*
+      - "something*"
 #       - v1.*
 #       - v2.*
 #       - v3.*
