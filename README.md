@@ -58,6 +58,7 @@ tesla-solar-charger uses geolocation to make sure the Tesla only charges when it
 To determine this, it requires the user to define a square geofence around the charger by providing 
 north, south, east, and west boundaries in the `.env` file.
 
+
 As an example, the charger geofence could be set to the four corners of the NQE office property:
 ![](https://raw.githubusercontent.com/calebwebster/tesla-solar-charger/main/doc/nqeng_geofence_1.png)
 ![](https://raw.githubusercontent.com/calebwebster/tesla-solar-charger/main/doc/nqeng_geofence_2.png)
