@@ -1,0 +1,36 @@
+---
+name: "pre-release"
+
+on: [workflow_dispatch]
+
+jobs:
+  pre-release:
+    name: "Pre Release"
+    runs-on: "ubuntu-latest"
+
+    steps:
+      # ...
+      - name: "Build & test"
+        run: |
+          curl -O https://download.clojure.org/install/linux-install-1.11.1.1347.sh
+          chmod +x linux-install-1.11.1.1347.sh
+          sudo ./linux-install-1.11.1.1347.sh
+          sudo apt install openjdk-17-jdk-headless
+          sudo apt install openjdk-17-jre-headless
+          curl -O https://raw.githubusercontent.com/technomancy/leiningen/stable/bin/lein
+          chmod +x lein
+          sudo mv lein /usr/local/bin
+          clojure --version
+          java --version
+          lein --version
+          echo "done!"
+
+#       - uses: "marvinpinto/action-automatic-releases@latest"
+#         with:
+#           repo_token: "${{ secrets.GITHUB_TOKEN }}"
+#           automatic_release_tag: "latest"
+#           prerelease: true
+#           title: "Development Build"
+#           files: |
+#             LICENSE.txt
+#             *.jar
