@@ -8,9 +8,9 @@ on:
   push:
     tags:
       - "something*"
-#       - v1.*
-#       - v2.*
-#       - v3.*
+      - v1.*
+      - v2.*
+      - v3.*
   
 jobs:
   pre-release:
