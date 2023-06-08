@@ -6,7 +6,7 @@ name: "pre-release"
 on:
   push:
     tags:
-      - "*"
+      - v*
   
 jobs:
   pre-release:
