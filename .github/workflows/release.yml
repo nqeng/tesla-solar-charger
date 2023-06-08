@@ -34,15 +34,13 @@ jobs:
           cd repository
           ls -l
           lein uberjar
-          tree .
           echo "done!"
 
-#       - uses: "marvinpinto/action-automatic-releases@latest"
-#         with:
-#           repo_token: "${{ secrets.GITHUB_TOKEN }}"
-#           automatic_release_tag: "latest"
-#           prerelease: true
-#           title: "Development Build"
-#           files: |
-#             repository/target/default+uberjar/LICENSE.txt
-#             repository/*.jar
+      - uses: "marvinpinto/action-automatic-releases@latest"
+        with:
+          repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          automatic_release_tag: "latest"
+          prerelease: true
+          title: "Development Build"
+          files: |
+            repository/target/uberjar/*-standalone.jar
