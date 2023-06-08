@@ -10,7 +10,7 @@ on:
       - "v2.*"
       - "v3.*"
   workflow_dispatch:
-
+  
 jobs:
   pre-release:
     name: "Pre Release"
