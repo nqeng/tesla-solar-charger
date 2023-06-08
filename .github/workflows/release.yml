@@ -47,6 +47,7 @@ jobs:
           echo $version
           export version="2.0.0"
           echo $version
+          echo "version=2.0.0" >> $GITHUB_ENV
 
       - uses: "marvinpinto/action-automatic-releases@latest"
         with:
