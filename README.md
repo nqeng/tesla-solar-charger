@@ -53,6 +53,7 @@ GRID_SENSOR_DEVICE_ID=
 GRID_POWER_DATA_ID=
 ```
 
+
 ### Setting the Charger Geofence
 tesla-solar-charger uses geolocation to make sure the Tesla only charges when it is near the charger.
 To determine this, it requires the user to define a square geofence around the charger by providing 
