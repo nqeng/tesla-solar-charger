@@ -7,8 +7,8 @@ name: "pre-release"
 on:
   workflow_dispatch:
   push:
-#     tags:
-#       - something
+    tags:
+      - something*
 #       - v1.*
 #       - v2.*
 #       - v3.*
