@@ -4,6 +4,7 @@ name: "pre-release"
 #  Settings -> Actions -> General and give "Read and write permissions" to the Github Actions workflows.
 
 on:
+  workflow_dispatch:
   push:
     tags:
       - v
