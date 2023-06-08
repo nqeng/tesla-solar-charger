@@ -25,7 +25,7 @@ jobs:
           clojure --version
           java --version
           lein --version
-          cd tesla-solar-charger
+          pwd
           ls
           echo "done!"
 
