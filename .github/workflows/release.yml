@@ -44,7 +44,7 @@ jobs:
           echo "done!"
           export version=$(cat repository/project.clj | grep defproject | grep -o '"[0-99].[0-99].[0-99]"' | sed 's/"//g')
           echo $version
-          echo "VERSION=2.0.0" >> $GITHUB_ENV
+          echo "VERSION=$version" >> $GITHUB_ENV
 
       - uses: "marvinpinto/action-automatic-releases@latest"
         with:
