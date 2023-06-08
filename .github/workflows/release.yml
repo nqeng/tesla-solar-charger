@@ -15,8 +15,6 @@ jobs:
   pre-release:
     name: "Pre Release"
     runs-on: "ubuntu-latest"
-    env:
-        version: "1.0.0"
 
     steps:
       - uses: actions/checkout@v3
@@ -44,17 +42,16 @@ jobs:
           ls -l
           lein uberjar
           echo "done!"
+          export version=$(cat repository/project.clj | grep defproject | grep -o '"[0-99].[0-99].[0-99]"' | sed 's/"//g')
           echo $version
-          export version="2.0.0"
-          echo $version
-          echo "version=2.0.0" >> $GITHUB_ENV
+          echo "VERSION=2.0.0" >> $GITHUB_ENV
 
       - uses: "marvinpinto/action-automatic-releases@latest"
         with:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
           prerelease: false
-          title: "Release ${{ env.version }}"
-          automatic_release_tag: "1.0.0"
+          title: "Release ${{ env.VERSION }}"
+          automatic_release_tag: "${{ env.VERSION }}"
           files: |
             repository/target/uberjar/*-standalone.jar
           
