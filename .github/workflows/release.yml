@@ -30,9 +30,9 @@ jobs:
           java --version
           lein --version
           pwd
-          ll
+          ls -l
           cd repository
-          ll
+          ls -l
           lein uberjar
           tree .
           echo "done!"
