@@ -15,6 +15,7 @@ jobs:
           path: "repository"
       - name: "Build & test"
         run: |
+          java --version
           sudo apt update
           curl -O https://download.clojure.org/install/linux-install-1.11.1.1347.sh
           chmod +x linux-install-1.11.1.1347.sh
@@ -31,6 +32,7 @@ jobs:
           ls
           cd repository
           ls
+          lein uberjar
           echo "done!"
 
 #       - uses: "marvinpinto/action-automatic-releases@latest"
