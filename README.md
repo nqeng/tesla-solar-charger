@@ -11,7 +11,6 @@ FIXME: description
 
 ## Installation from source
 
-
 - Requires [Java 17](https://www.oracle.com/au/java/technologies/downloads/#java17)
 - Requires [Clojure](https://clojure.org/guides/install_clojure)
 - Requires [Leiningen](https://leiningen.org/)
