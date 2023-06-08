@@ -6,9 +6,9 @@ name: "pre-release"
 on:
   push:
     tags:
-      - "v1.*"
-      - "v2.*"
-      - "v3.*"
+      - "v1*"
+      - "v2*"
+      - "v3*"
   workflow_dispatch:
   
 jobs:
