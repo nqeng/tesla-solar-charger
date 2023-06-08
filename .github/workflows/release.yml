@@ -45,7 +45,7 @@ jobs:
           lein uberjar
           echo "done!"
           echo $version
-          export verion="2.0.0"
+          export version="2.0.0"
           echo $version
 
       - uses: "marvinpinto/action-automatic-releases@latest"
