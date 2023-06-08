@@ -65,7 +65,6 @@ As an example, the charger geofence could be set to the four corners of the NQE 
 
 ### Setting the Sungrow Data Information
 
-
 ## Modification
 
 ## License
