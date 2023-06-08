@@ -42,7 +42,7 @@ jobs:
           ls -l
           lein uberjar
           echo "done!"
-          export version=$(cat repository/project.clj | grep defproject | grep -o '"[0-99].[0-99].[0-99]"' | sed 's/"//g')
+          export version=$(cat project.clj | grep defproject | grep -o '"[0-99].[0-99].[0-99]"' | sed 's/"//g')
           echo $version
           echo "VERSION=$version" >> $GITHUB_ENV
 
