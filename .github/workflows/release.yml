@@ -50,7 +50,7 @@ jobs:
         with:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
           prerelease: false
-          title: "Release ${{ env.VERSION }}"
+          title: "${{ env.VERSION }}"
           automatic_release_tag: "${{ env.VERSION }}"
           files: |
             repository/target/uberjar/*-standalone.jar
