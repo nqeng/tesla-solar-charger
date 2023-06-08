@@ -29,6 +29,8 @@ jobs:
           lein --version
           pwd
           ls
+          cd repository
+          ls
           echo "done!"
 
 #       - uses: "marvinpinto/action-automatic-releases@latest"
