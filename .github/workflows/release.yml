@@ -1,17 +1,18 @@
-name: "Release"
+name: "Create Release"
 
 #  Settings -> Actions -> General and give "Read and write permissions" to the Github Actions workflows.
 
 on:
-  push:
-    tags:
-      - v2
+  pull_request:
+    types:
+      - opened
   workflow_dispatch:
   
 jobs:
-  pre-release:
-    name: "Pre Release"
+  release:
+    name: "Create Release"
     runs-on: "ubuntu-latest"
+    if:  (github.event_name == 'pull_request' && github.event.pull_request.title == 'Release') || github.event_name == 'workflow_dispatch'
 
     steps:
       - uses: actions/checkout@v3
