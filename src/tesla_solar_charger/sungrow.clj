@@ -165,5 +165,5 @@ Power available to Tesla: %.2fW"
     token
     data-timestamp
     (env "GRID_SENSOR_DEVICE_ID")
-    (env "GRID_POWER_DATA_POINT_ID"))))
+    (env "GRID_POWER_DATA_ID"))))
 
