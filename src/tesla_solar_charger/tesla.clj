@@ -1,10 +1,9 @@
 (ns tesla-solar-charger.tesla
   (:require
+   [tesla-solar-charger.env :as env]
    [clj-http.client :as client]
    [cheshire.core :as json]
-   [dotenv :refer [env]]))
-
-
+   ))
 
 (def power-to-current-3-phase 687.5)
 (def power-to-current-3-phase-delta 262.5)
@@ -34,7 +33,7 @@
          json (json/parse-string (:body response))]
      json))
   ([]
-   (get-vehicle-state (env "TESLA_VIN") (env "TESSIE_TOKEN"))))
+   (get-vehicle-state env/tesla-vin env/tessie-token)))
 
 (defn set-charge-amps
   "Sends a request to Tessie to set the charge speed of a Tesla vehicle.
@@ -59,7 +58,7 @@
                  (str "Failed to set Tesla charge amps; " error)
                  {:type :err-could-not-set-charge-amps}))))))
   ([charge-speed-amps]
-   (set-charge-amps (env "TESLA_VIN") (env "TESSIE_TOKEN") charge-speed-amps)))
+   (set-charge-amps env/tesla-vin env/tessie-token charge-speed-amps)))
 
 (defn get-time-to-full-charge-minutes
   [tesla-state]
@@ -88,7 +87,7 @@
 (defn is-charging?
   [tesla-state]
   (let [tesla-charge-state (get-tesla-charge-state tesla-state)]
-    (= "Charging" tesla-charge-state)))
+    (not (= "Charging" tesla-charge-state))))
 
 (defn get-battery-level-percent
   [tesla-state]
@@ -123,11 +122,11 @@
                            charger-longitude
                            tesla-latitude
                            tesla-longitude)]
-     (< distance-between 0.0005)))
+     (not (< distance-between 0.0005))))
   ([tesla-state]
    (is-near-charger? tesla-state
-                     (Float/parseFloat (env "CHARGER_LATITUDE"))
-                     (Float/parseFloat (env "CHARGER_LONGITUDE")))))
+                     env/charger-latitude
+                     env/charger-longitude)))
 
 (defn create-status-message
   [tesla-state]
@@ -140,8 +139,8 @@ Tesla power draw: %.2fW
 Battery level: %d%%
 Time to full charge: %dh %dm
 Vehicle VIN: %s"
-            charge-amps
-            (* charge-amps power-to-current-3-phase)
-            battery-level-percent
-            hours-to-full-charge (mod minutes-to-full-charge 60)
-            (env "TESLA_VIN"))))
+            (int charge-amps)
+            (float (* charge-amps power-to-current-3-phase))
+            (int battery-level-percent)
+            (int hours-to-full-charge) (int (mod minutes-to-full-charge 60))
+            env/tesla-vin)))
