@@ -228,7 +228,7 @@
                                             (sleep 10000)
                                             (assoc state
                                                    :was-tesla-charging true))
-        (throw e))))
+        (throw e)))))
 
 (def initial-state {:sungrow-token nil
                     :last-data-point nil
