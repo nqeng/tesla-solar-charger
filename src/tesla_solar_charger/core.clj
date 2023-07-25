@@ -227,7 +227,8 @@
                                             (log (ex-message e))
                                             (sleep 10000)
                                             (assoc state
-                                                   :was-tesla-charging true))))))
+                                                   :was-tesla-charging true))
+        (throw e))))
 
 (def initial-state {:sungrow-token nil
                     :last-data-point nil
