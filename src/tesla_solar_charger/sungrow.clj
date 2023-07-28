@@ -1,14 +1,14 @@
 (ns tesla-solar-charger.sungrow
   (:require
-   [dotenv :refer [env]]
    [clojure.string :as str]
    [clj-http.client :as client]
-   [cheshire.core :as json]))
+   [cheshire.core :as json]
+   [tesla-solar-charger.env :as env]))
 
 (def api-key "93D72E60331ABDCDC7B39ADC2D1F32B3")
 (def data-interval-minutes 5)  ; Time interval between data points
 
-(defn format-data-point-timestamp
+(defn create-data-point-timestamp
   "15/05/2023:14:00:00 => 20230515140000"
   [datetime]
   (.format
@@ -32,7 +32,7 @@
   [datetime]
   (-> datetime
       (get-most-recent-minute-interval data-interval-minutes)
-      (format-data-point-timestamp)))
+      (create-data-point-timestamp)))
 
 (defn send-login-request
   [username password]
@@ -86,7 +86,7 @@
                {:type :err-sungrow-login-failed})))))
 
   ([]
-   (login (env "SUNGROW_USERNAME") (env "SUNGROW_PASSWORD"))))
+   (login env/sungrow-username env/sungrow-password)))
 
 (defn create-status-message
   ([data-timestamp
@@ -96,14 +96,14 @@
 Power feeding to grid: %.2fW
 Power available to Tesla: %.2fW"
            data-timestamp
-           power-to-grid-watts
-           (- power-to-grid-watts power-buffer-watts)))
+           (float power-to-grid-watts)
+           (float (- power-to-grid-watts power-buffer-watts))))
   ([data-timestamp
     power-to-grid-watts]
    (create-status-message
     data-timestamp
     power-to-grid-watts
-    (Float/parseFloat (env "POWER_BUFFER_WATTS")))))
+    env/power-buffer-watts)))
 
 (defn send-data-request
   [token start-timestamp end-timestamp data-devices data-points]
@@ -164,6 +164,6 @@ Power available to Tesla: %.2fW"
    (get-power-to-grid
     token
     data-timestamp
-    (env "GRID_SENSOR_DEVICE_ID")
-    (env "GRID_POWER_DATA_POINT_ID"))))
+    env/grid-sensor-device-id
+    env/grid-power-data-id)))
 

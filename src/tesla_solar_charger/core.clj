@@ -1,16 +1,27 @@
 (ns tesla-solar-charger.core
   (:gen-class)
   (:require
-   [dotenv :refer [env]]
    [tesla-solar-charger.tesla :as tesla]
    [tesla-solar-charger.sungrow :as sungrow]
-   [clojure.java.io :refer [make-parents]])
-  (:import (java.time.format DateTimeFormatter)
-           (java.time LocalDateTime)))
+   [tesla-solar-charger.env :as env]
+   [clojure.java.io :refer [make-parents]]
+   [clojure.string :as str])
+  (:import
+    (java.time.format DateTimeFormatter)
+    (java.time LocalDateTime)))
 
 (defn sleep
   [millis]
   (Thread/sleep millis))
+
+(defn format-time
+  [format-str time]
+  (.format time (DateTimeFormatter/ofPattern format-str))
+  )
+
+(defn time-now
+  []
+  (LocalDateTime/now))
 
 (defn replace-symbols
   "Given a map of replacement pairs and a form, returns a (nested)
@@ -35,20 +46,11 @@
         body (replace-symbols smap body)]
     (conj body bindings 'let)))
 
-(defn time-now
-  []
-  (LocalDateTime/now))
-
-(defn format-time
-  [time format-str]
-  (.format time (DateTimeFormatter/ofPattern format-str))
-  )
-
 (defn make-log-file-path
   [time]
-  (let [year-folder (format-time time "yy")
-        month-folder (format-time time "MM")
-        log-file (format-time time "yy-MM-dd")
+  (let [year-folder (format-time "yy" time)
+        month-folder (format-time "MM" time)
+        log-file (format-time "yy-MM-dd" time)
         log-file-path (format "./logs/%s/%s/%s.log" 
                               year-folder 
                               month-folder 
@@ -58,13 +60,13 @@
 (defn log
   [& args]
   (let [time (time-now)
-        log-timestamp (format-time time "yyyy-MM-dd HH:mm:ss")
-        log-message (format "[%s] %s" log-timestamp (apply println-str args))
+        log-timestamp (format-time "yyyy-MM-dd HH:mm:ss" time)
+        log-message (format "[%s] %s" log-timestamp (str/join "\n" args))
         log-file-path (make-log-file-path time)]
-    
-    (print log-message)
+
+    (println log-message)
     (make-parents log-file-path)
-    (spit log-file-path log-message :append true)
+    (spit log-file-path (str log-message "\n") :append true)
     ))
 
 (defn limit
@@ -97,9 +99,9 @@
     power-to-grid-watts
     tesla-charge-amps
     tesla-max-amps
-    (Float/parseFloat (env "POWER_BUFFER_WATTS"))
-    (Float/parseFloat (env "MAX_CLIMB_AMPS"))
-    (Float/parseFloat (env "MAX_DROP_AMPS")))))
+    env/power-buffer-watts
+    env/max-climb-amps
+    env/max-drop-amps)))
 
 (defn did-tesla-stop-charging?
   [was-tesla-charging tesla-state]
@@ -116,7 +118,7 @@
 (defn run-program
   [state]
   (try
-    (let
+    (lazy-let
      [sungrow-token (if (:sungrow-token state) (:sungrow-token state) (sungrow/login))
       tesla-state (tesla/get-vehicle-state)
       data-point (sungrow/get-most-recent-data-timestamp (time-now))
@@ -148,14 +150,14 @@
         (do
           (log "Tesla is not charging")
           (sleep 5000)
-          state)
+          (assoc state
+                 :was-tesla-charging false))
         ; If max charge speed override is in place
         (tesla/is-charge-overridden? tesla-state)
         (do
           (tesla/set-charge-amps tesla-max-charge-amps)
-          (log "Charge speed overridden; charging at max")
-          (println (tesla/create-status-message tesla-state))
-          (println)
+          (log "Charge speed overridden; charging at max" 
+               (tesla/create-status-message tesla-state))
           (assoc state
                  :was-tesla-charging true))
         ; If Tesla is charging and hasn't been charging previously,
@@ -163,9 +165,8 @@
         (did-tesla-start-charging? (:was-tesla-charging state) tesla-state)
         (do
           (tesla/set-charge-amps 0)
-          (log "Tesla connected; started charging at 0A")
-          (println (tesla/create-status-message tesla-state))
-          (println)
+          (log "Tesla connected; started charging at 0A" 
+               (tesla/create-status-message tesla-state))
           (assoc state
                  :was-tesla-charging true))
         ; If no new data point
@@ -184,10 +185,10 @@
         ; If charge amps haven't changed, don't update Tesla
         (= new-charge-amps tesla-charge-amps)
         (do
-          (log "No change to Tesla charge speed")
-          (println sungrow-status-message)
-          (println (tesla/create-status-message tesla-state))
-          (println)
+          (log 
+            "No change to Tesla charge speed" 
+            sungrow-status-message 
+            (tesla/create-status-message tesla-state))
           (assoc state
                  :was-tesla-charging true
                  :sungrow-token sungrow-token
@@ -198,10 +199,9 @@
           (tesla/set-charge-amps new-charge-amps)
           (log (format "Changed Tesla charge speed by %s%dA"
                        (if (pos? charge-change-amps) "+" "-")
-                       (abs charge-change-amps)))
-          (println sungrow-status-message)
-          (println (tesla/create-status-message tesla-state))
-          (println)
+                       (abs charge-change-amps))
+               sungrow-status-message
+               (tesla/create-status-message tesla-state))
           (assoc state
                  :was-tesla-charging true
                  :sungrow-token sungrow-token
@@ -227,7 +227,8 @@
                                             (log (ex-message e))
                                             (sleep 10000)
                                             (assoc state
-                                                   :was-tesla-charging true))))))
+                                                   :was-tesla-charging true))
+        (throw e)))))
 
 (def initial-state {:sungrow-token nil
                     :last-data-point nil
