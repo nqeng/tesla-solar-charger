@@ -151,7 +151,7 @@
           (log "Tesla is not charging")
           (sleep 5000)
           (assoc state
-                 :was-tesla-charging true))
+                 :was-tesla-charging false))
         ; If max charge speed override is in place
         (tesla/is-charge-overridden? tesla-state)
         (do
