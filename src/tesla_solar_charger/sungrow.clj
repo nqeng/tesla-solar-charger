@@ -159,7 +159,7 @@ Power available to Tesla: %.2fW"
          power-value-str (get-in json-data [grid-sensor-device meter-active-power data-timestamp] "--")]
      (if (= "--" power-value-str)
        nil
-       (- (Float/parseFloat power-value-str)))))
+         (- (Float/parseFloat power-value-str)))))
   ([token data-timestamp]
    (get-power-to-grid
     token

@@ -2,26 +2,21 @@
   (:require
    [tesla-solar-charger.env :as env]
    [clj-http.client :as client]
-   [cheshire.core :as json]
-   ))
+   [cheshire.core :as json]))
 
 (def power-to-current-3-phase 687.5)
 (def power-to-current-3-phase-delta 262.5)
 (def power-to-current-1-phase 231.25)
 (def power-to-current-2-phase 462.5)
 
-(defn send-vehicle-state-request
-  [tesla-vin tessie-token]
-  (client/get
-   (str "https://api.tessie.com/" tesla-vin "/state")
-   {:oauth-token tessie-token
-    :accept :json}))
-
 (defn get-vehicle-state
   ([tesla-vin tessie-token]
    (let [response
          (try
-           (send-vehicle-state-request tesla-vin tessie-token)
+           (client/get
+            (str "https://api.tessie.com/" tesla-vin "/state")
+            {:oauth-token tessie-token
+             :accept :json})
            (catch clojure.lang.ExceptionInfo e
              (let [error (-> (ex-data e)
                              (:body)
@@ -60,7 +55,7 @@
   ([charge-speed-amps]
    (set-charge-amps env/tesla-vin env/tessie-token charge-speed-amps)))
 
-(defn get-time-to-full-charge-minutes
+(defn get-minutes-to-full-charge
   [tesla-state]
   (get-in tesla-state ["charge_state" "minutes_to_full_charge"]))
 
@@ -83,6 +78,13 @@
 (defn get-tesla-latitude
   [tesla-state]
   (get-in tesla-state ["drive_state" "latitude"]))
+
+(defn get-minutes-to-full-charge-at-max-rate
+  [tesla-state]
+  (-> (get-charge-amps tesla-state)
+      (/ (get-max-charge-amps tesla-state))
+      (* (get-minutes-to-full-charge tesla-state))
+      (int)))
 
 (defn is-charging?
   [tesla-state]
@@ -132,7 +134,7 @@
   [tesla-state]
   (let [charge-amps (get-charge-amps tesla-state)
         battery-level-percent (get-battery-level-percent tesla-state)
-        minutes-to-full-charge (get-time-to-full-charge-minutes tesla-state)
+        minutes-to-full-charge (get-minutes-to-full-charge tesla-state)
         hours-to-full-charge (int (/ minutes-to-full-charge 60))]
     (format "Tesla charge speed: %dA
 Tesla power draw: %.2fW
