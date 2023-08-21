@@ -254,10 +254,11 @@
               (tesla/create-status-message tesla-state))
          (assoc state
                 :was-tesla-charging true
-                :thingspeak-logs (conj (:thingspeak-logs state)
-                                       ["charge_rate" 0]
-                                       ["battery_level" battery-level]
-                                       ["power_draw" 0])))
+                ;:thingspeak-logs (conj (:thingspeak-logs state)
+                ;                       ["charge_rate" 0]
+                ;                       ["battery_level" (first battery-level)]
+                ;                       ["power_draw" 0])
+                ))
 
         ; If no new data point
        (= data-point (:last-data-point state))
@@ -277,11 +278,9 @@
         ; If charge amps haven't changed, don't update Tesla
        (= new-charge-amps tesla-charge-amps)
        (do
-         (conj (:thingspeak-logs state)
-               ["grid_power" power-to-grid-watts]
-               ["charge_rate" new-charge-amps]
-               ["battery_level" battery-level]
-               ["power_draw" tesla-power-draw])
+         (println "conjoining...")
+         (println power-to-grid-watts)
+         (conj (:thingspeak-logs state) [""])
          (log
           "No change to Tesla charge speed"
           sungrow-status-message
@@ -292,13 +291,13 @@
                 :sungrow-token sungrow-token
                 :last-data-point data-point
                 ;:thingspeak-logs (conj (:thingspeak-logs state)
-                ;                       ["grid_power" power-to-grid-watts]
-                ;                       ["charge_rate" new-charge-amps]
-                ;                       ["battery_level" battery-level]
-                ;                       ["power_draw" tesla-power-draw])
+                ;                       ["grid_power" (first power-to-grid-watts)]
+                ;                       ["charge_rate" (first new-charge-amps)]
+                ;                       ["battery_level" (first battery-level)]
+                ;                       ["power_draw" (first tesla-power-draw)])
                 ))
 
-        ; If charge amps have changed, update Tesla
+; If charge amps have changed, update Tesla
        (<= time-left-minutes time-until-charged-at-max-rate-minutes)
        (do
          (tesla/set-charge-amps tesla-max-charge-amps)
@@ -325,11 +324,12 @@
                 :was-tesla-charging true
                 :sungrow-token sungrow-token
                 :last-data-point data-point
-                :thingspeak-logs (conj (:thingspeak-logs state)
-                                       ["grid_power" power-to-grid-watts]
-                                       ["charge_rate" new-charge-amps]
-                                       ["battery_level" battery-level]
-                                       ["power_draw" tesla-power-draw])))))
+                ;:thingspeak-logs (conj (:thingspeak-logs state)
+                ;                       ["grid_power" power-to-grid-watts]
+                ;                       ["charge_rate" new-charge-amps]
+                ;                       ["battery_level" battery-level]
+                ;                       ["power_draw" tesla-power-draw])
+                ))))
 
     (catch java.net.UnknownHostException e
       (do
@@ -365,10 +365,66 @@
                     :thingspeak-logs []
                     :last-thingspeak-log-time nil})
 
+(defn pop-action
+  [state]
+  (assoc state :actions (vec (rest (:actions state)))))
+
+(defn push-action
+  [state action]
+  (assoc state :actions (conj (:actions state) action)))
+
+(defn fn-name
+  [f]
+  (clojure.string/replace (first (re-find #"(?<=\$)([^@]+)(?=@)" (str f))) "_" "-"))
+
+(defn act
+  [state]
+  (if (empty? (:actions state))
+    state
+    (let [next-action (first (:actions state))
+          nothing (println (str "performing " (fn-name next-action)))
+          state-without-action (pop-action state)
+          new-state (next-action state-without-action)]
+      new-state)))
+
+(defn print-state
+  [state]
+  (println (format "{:number %d, :actions %s"
+                   (:number state)
+                   (vec (map fn-name (:actions state)))))
+  state)
+
+(defn print-number
+  [state]
+  (println (:number state))
+  state)
+
+(defn add-one
+  [state]
+  (assoc state :number (+ 1 (:number state))))
+
+(defn say-hello
+  [state]
+  (println "Hi!")
+  (-> state
+      (push-action print-state)
+      (push-action print-state)
+      (push-action print-state)
+      (push-action print-state)
+      (push-action print-state)))
+
 (defn -main
   [& args]
-  (log "Starting...")
-  (loop [state initial-state]
-    (let [new-state (run-program state)]
+  (println "Starting...")
+
+  (loop [state {:number 0 :actions [say-hello]}]
+    (let [new-state (act state)]
       (recur new-state))))
+
+;(defn -main
+;  [& args]
+;  (log "Starting...")
+;  (loop [state initial-state]
+;    (let [new-state (run-program state)]
+;      (recur new-state))))
 
