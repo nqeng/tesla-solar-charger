@@ -16,6 +16,10 @@
   [millis]
   (Thread/sleep millis))
 
+(defn sleep-seconds
+  [seconds]
+  (Thread/sleep (* 1000 seconds)))
+
 (defn format-time
   [format-str time]
   (.format time (DateTimeFormatter/ofPattern format-str)))
@@ -76,7 +80,7 @@
     (< num min) min
     :else       num))
 
-(defn calc-new-charge-amps
+(defn calc-new-charge-rate
   ([power-to-grid-watts
     tesla-charge-amps
     tesla-max-amps
@@ -95,7 +99,7 @@
   ([power-to-grid-watts
     tesla-charge-amps
     tesla-max-amps]
-   (calc-new-charge-amps
+   (calc-new-charge-rate
     power-to-grid-watts
     tesla-charge-amps
     tesla-max-amps
@@ -134,7 +138,7 @@
 (defn calc-required-current
   [tesla-state time-left-minutes]
   (-> tesla-state
-      tesla/get-charge-amps
+      tesla/get-charge-rate
       (/ time-left-minutes)
       (* (tesla/get-minutes-to-full-charge tesla-state))
       int))
@@ -181,14 +185,14 @@
       thingspeak-logs (:thingspeak-logs state)
       next-thingspeak-log (first thingspeak-logs)
       sungrow-token (if (:sungrow-token state) (:sungrow-token state) (sungrow/login))
-      tesla-state (tesla/get-vehicle-state env/tesla-vin env/tessie-token)
+      tesla-state (tesla/get-data env/tesla-vin env/tessie-token)
       time-until-charged-minutes (tesla/get-minutes-to-full-charge tesla-state)
       time-until-charged-at-max-rate-minutes (tesla/get-minutes-to-full-charge-at-max-rate tesla-state)
       data-point (sungrow/get-most-recent-data-timestamp (time-now))
       power-to-grid-watts (sungrow/get-power-to-grid sungrow-token data-point)
-      tesla-charge-amps (tesla/get-charge-amps tesla-state)
-      tesla-max-charge-amps (tesla/get-max-charge-amps tesla-state)
-      new-charge-amps (calc-new-charge-amps power-to-grid-watts tesla-charge-amps tesla-max-charge-amps)
+      tesla-charge-amps (tesla/get-charge-rate tesla-state)
+      tesla-max-charge-amps (tesla/get-max-charge-rate tesla-state)
+      new-charge-amps (calc-new-charge-rate power-to-grid-watts tesla-charge-amps tesla-max-charge-amps)
       sungrow-status-message (sungrow/create-status-message data-point power-to-grid-watts)
       battery-level (tesla/get-battery-level-percent tesla-state)
       tesla-power-draw (float (* new-charge-amps tesla/power-to-current-3-phase))
@@ -210,22 +214,22 @@
                 :thingspeak-logs (rest (:thingspeak-logs state))
                 :last-thingspeak-log-time current-time))
 
-;(not (tesla/is-near-charger? tesla-state))
+        ;(not (tesla/is-near-charger? tesla-state))
         ;(do
         ;  (log "Tesla is not at the NQE office")
         ;  (sleep 60000)
         ;  (assoc state
-        ;         :was-tesla-charging false))
+        ;         :was-charging-previously false))
 
         ; If Tesla is not charging and has been charging previously,
         ; wait
-        ;(did-tesla-stop-charging? (:was-tesla-charging state) tesla-state)
+        ;(did-tesla-stop-charging? (:was-charging-previously state) tesla-state)
         ;(do
         ;  (tesla/set-charge-amps tesla-max-charge-amps)
         ;  (log "Tesla disconnected; reset charge amps to max")
         ;  (sleep 10000)
         ;  (assoc state
-        ;         :was-tesla-charging false))
+        ;         :was-charging-previously false))
 
         ; If Tesla is not charging and hasn't been charging previously,
         ; wait
@@ -234,26 +238,26 @@
         ;  (log "Tesla is not charging")
         ;  (sleep 5000)
         ;  (assoc state
-        ;         :was-tesla-charging false))
+        ;         :was-charging-previously false))
 
         ; If max charge speed override is in place
-       (tesla/is-charge-overridden? tesla-state)
+       (tesla/is-override-active? tesla-state)
        (do
          (tesla/set-charge-amps tesla-max-charge-amps)
          (log "Charge speed overridden; charging at max"
               (tesla/create-status-message tesla-state))
          (assoc state
-                :was-tesla-charging true))
+                :was-charging-previously true))
 
         ; If Tesla is charging and hasn't been charging previously,
         ; begin charging at zero amps
-       (did-tesla-start-charging? (:was-tesla-charging state) tesla-state)
+       (did-tesla-start-charging? (:was-charging-previously state) tesla-state)
        (do
          (tesla/set-charge-amps 0)
          (log "Tesla connected; started charging at 0A"
               (tesla/create-status-message tesla-state))
          (assoc state
-                :was-tesla-charging true
+                :was-charging-previously true
                 ;:thingspeak-logs (conj (:thingspeak-logs state)
                 ;                       ["charge_rate" 0]
                 ;                       ["battery_level" (first battery-level)]
@@ -264,7 +268,7 @@
        (= data-point (:last-data-point state))
        (do
          (assoc state
-                :was-tesla-charging true))
+                :was-charging-previously true))
 
         ; If data point hasn't been published yet, wait
        (nil? power-to-grid-watts)
@@ -272,7 +276,7 @@
          (log "Null data point; waiting for data")
          (sleep 40000)
          (assoc state
-                :was-tesla-charging true
+                :was-charging-previously true
                 :sungrow-token sungrow-token))
 
         ; If charge amps haven't changed, don't update Tesla
@@ -287,7 +291,7 @@
           (tesla/create-status-message tesla-state)
           (format "Time left: %d minutes%n" time-left-minutes))
          (assoc state
-                :was-tesla-charging true
+                :was-charging-previously true
                 :sungrow-token sungrow-token
                 :last-data-point data-point
                 ;:thingspeak-logs (conj (:thingspeak-logs state)
@@ -304,7 +308,7 @@
          (log "Charge speed overridden; charging at max"
               (tesla/create-status-message tesla-state))
          (assoc state
-                :was-tesla-charging true
+                :was-charging-previously true
                ; :thingspeak-logs (conj (:thingspeak-logs state)
                ;                        ["grid_power" power-to-grid-watts]
                ;                        ["charge_rate" new-charge-amps]
@@ -321,7 +325,7 @@
               sungrow-status-message
               (tesla/create-status-message tesla-state))
          (assoc state
-                :was-tesla-charging true
+                :was-charging-previously true
                 :sungrow-token sungrow-token
                 :last-data-point data-point
                 ;:thingspeak-logs (conj (:thingspeak-logs state)
@@ -347,7 +351,7 @@
         (do
           (log "Sungrow not logged in; re-authenticated")
           (assoc state
-                 :was-tesla-charging true
+                 :was-charging-previously true
                  :sungrow-token nil))
 
         :err-sungrow-login-too-frequently
@@ -355,19 +359,19 @@
           (log (ex-message e))
           (sleep 10000)
           (assoc state
-                 :was-tesla-charging true))
+                 :was-charging-previously true))
 
         (throw e)))))
 
 (def initial-state {:sungrow-token nil
                     :last-data-point nil
-                    :was-tesla-charging false
+                    :was-charging-previously false
                     :thingspeak-logs []
                     :last-thingspeak-log-time nil})
 
 (defn pop-action
   [state]
-  (assoc state :actions (vec (rest (:actions state)))))
+  [(assoc state :actions (vec (rest (:actions state)))) (first (:actions state))])
 
 (defn push-action
   [state action]
@@ -377,47 +381,235 @@
   [f]
   (clojure.string/replace (first (re-find #"(?<=\$)([^@]+)(?=@)" (str f))) "_" "-"))
 
-(defn act
-  [state]
-  (if (empty? (:actions state))
-    state
-    (let [next-action (first (:actions state))
-          nothing (println (str "performing " (fn-name next-action)))
-          state-without-action (pop-action state)
-          new-state (next-action state-without-action)]
-      new-state)))
-
 (defn print-state
   [state]
-  (println (format "{:number %d, :actions %s"
+  (println (format "{%n\t:number %d, %n\t:actions %s %n\t:tesla-data %d chars%n}"
                    (:number state)
-                   (vec (map fn-name (:actions state)))))
+                   (vec (map fn-name (:actions state)))
+                   (count (str (:tesla-data state)))))
   state)
 
-(defn print-number
-  [state]
-  (println (:number state))
-  state)
+(defn log-message
+  [message]
+  (println message))
 
-(defn add-one
-  [state]
-  (assoc state :number (+ 1 (:number state))))
+(defn start-sleep
+  [seconds state]
+  (assoc state :sleep-until (.plusSeconds (:time state) seconds)))
 
-(defn say-hello
+(defn check-if-tesla-charge-rate-changed
   [state]
-  (println "Hi!")
+  (if (not (= (:new-tesla-charge-rate state) (tesla/get-charge-rate (:tesla-data state))))
+    (-> state
+        (push-action (fn [state] (tesla/set-charge-amps (:new-tesla-charge-rate state)) state))
+        (push-action (fn [state] (printf "Set tesla charge rate to %dA%n" (:new-tesla-charge-rate state)) state)))
+    (-> state
+        (push-action (fn [state] (printf "Tesla charge rate same; no change%n") state)))))
+
+(defn calc-tesla-charge-rate
+  [state]
+  (-> (:power-to-grid state)
+      (- env/power-buffer-watts)
+      (limit (- env/max-drop-amps) (env/max-climb-amps))
+      (+ (tesla/get-charge-rate (:tesla-data state)))
+      float
+      Math/round
+      int
+      (limit 0 (tesla/get-max-charge-rate (:tesla-data state)))
+      (assoc state :new-tesla-charge-rate)))
+
+(defn check-if-grid-power-is-nil
+  [state]
+  (if (nil? (:power-to-grid state))
+    (-> state
+        (push-action (fn [state] (printf "Null data point; waiting for data%n") state)))
+    (-> state
+        (push-action calc-tesla-charge-rate)
+        (push-action check-if-tesla-charge-rate-changed))))
+
+(defn login-to-sungrow
+  [state]
+  (try
+    (-> state
+        (assoc :sungrow-token (sungrow/login))
+        (push-action (fn [state] (printf "Sungrow not logged in; re-authenticated%n") state)))
+    (catch clojure.lang.ExceptionInfo e
+      (case (:type (ex-data e))
+        (assoc state :sungrow-token nil)))))
+
+(defn get-sungrow-data
+  [state]
+  (try
+    (-> state
+        (assoc :power-to-grid (sungrow/get-power-to-grid (:sungrow-token state) (:next-data-point state)))
+        (push-action check-if-grid-power-is-nil))
+    (catch clojure.lang.ExceptionInfo e
+      (case (:type (ex-data e))
+        :err-sungrow-auth-failed
+        (-> state
+            (push-action login-to-sungrow))
+        (throw e)))))
+
+(defn check-if-new-sungrow-data
+  [state]
+  (if (not (= (:next-data-point state) (:last-data-point state)))
+    (-> state
+        (push-action get-sungrow-data))
+    state))
+
+(defn get-next-sungrow-data-point
+  [state]
   (-> state
-      (push-action print-state)
-      (push-action print-state)
-      (push-action print-state)
-      (push-action print-state)
-      (push-action print-state)))
+      (assoc :next-data-point (sungrow/create-data-point-timestamp (:time state)))))
+
+(defn get-time-left
+  [state]
+  (-> state
+      (assoc :time-left (calc-minutes-between-times (:time state) (get-target-time (:time state))))))
+
+(defn set-tesla-charge-rate
+  [new-charge-rate state]
+  (if (= new-charge-rate (tesla/get-charge-rate (:tesla-data state)))
+    (-> state
+        (push-action (fn [state] (tesla/set-charge-amps new-charge-rate) state))
+        (push-action (fn [state] (printf "Set tesla charge rate to %dA%n" new-charge-rate) state)))
+    (-> state
+        (push-action (fn [state] (printf "No change to Tesla charge rate%n") state)))))
+
+(defn set-tesla-charge-rate-to-max
+  [state]
+  (let [max-charge-rate (tesla/get-max-charge-rate (:tesla-data state))]
+    (-> state
+        (push-action (partial set-tesla-charge-rate max-charge-rate)))))
+
+(defn check-if-should-override
+  [state]
+  (if (<= (:time-left state) (tesla/get-minutes-to-full-charge-at-max-rate (:tesla-data state)))
+    (-> state
+        (push-action (fn [state] (printf "Overriding charge speed to get to full%n" state)))
+        (push-action set-tesla-charge-rate-to-max))
+    (-> state
+        (push-action get-next-sungrow-data-point)
+        (push-action check-if-new-sungrow-data))))
+
+(defn check-if-user-override-active
+  [state]
+  (if (tesla/is-in-valet-mode? (:tesla-data state))
+    (-> state
+        (push-action (fn [state] (printf "Charge speed override active%n" state)))
+        (push-action set-tesla-charge-rate-to-max))
+    (-> state
+        (push-action get-time-left)
+        (push-action check-if-should-override))))
+
+(defn check-if-tesla-just-connected
+  [state]
+  (if (not (:was-charging-previously state))
+    (-> state
+        (push-action (partial set-tesla-charge-rate 0))
+        (push-action (fn [state] (printf "Tesla connected%n") state)))
+    (-> state
+        (push-action check-if-user-override-active))))
+
+(defn check-if-tesla-just-disconnected
+  [state]
+  (if (:was-charging-previously state)
+    (-> state
+        (push-action set-tesla-charge-rate-to-max)
+        (push-action (fn [state] (printf "Tesla disconnected%n") state))
+        (push-action (partial start-sleep 5)))
+    (-> state
+        (push-action (fn [state] (printf "Tesla is not charging%n") state))
+        (push-action (partial start-sleep 5)))))
+
+(defn check-if-tesla-is-charging
+  [state]
+  (if (tesla/is-charging? (:tesla-data state))
+    (-> state
+        (push-action check-if-tesla-just-connected)
+        (assoc :was-charging-previously true))
+    (-> state
+        (push-action check-if-tesla-just-disconnected)
+        (assoc :was-charging-previously false))))
+
+(defn check-if-tesla-is-near-charger
+  [state]
+  (if (tesla/is-near-charger? (:tesla-data state))
+    (-> state
+        (push-action check-if-tesla-is-charging))
+    (-> state
+        (push-action (fn [state] (printf "Tesla is not near the charger%n") state))
+        (push-action (partial start-sleep 60))
+        (assoc :was-charging-previously false))))
+
+(defn get-tesla-data
+  [state]
+  (try
+    (-> state
+        (assoc :tesla-data (tesla/get-data))
+        (push-action check-if-tesla-is-near-charger))
+    (catch clojure.lang.ExceptionInfo e
+      (case (:type (ex-data e))
+        :err-could-not-get-tesla-state
+        (-> state
+            (push-action (fn [state] (printf "Could not get tesla state%n") state))
+            (push-action (partial start-sleep 10))
+            (assoc :was-charging-previously false))
+        (throw e)))))
+
+(defn should-log-to-thingspeak
+  [state]
+  (and (seq (:thingspeak-logs state))
+       (or
+        (nil? (:last-thingspeak-log state))
+        (> (calc-seconds-between-times (:last-thingspeak-log state) (:time state)) 30))))
+
+(defn log-first-thingspeak
+  [state]
+  (let [next-thingspeak-log (first (:thingspeak-logs state))]
+    (log-to-thingspeak (first next-thingspeak-log) (last next-thingspeak-log))
+    (assoc state
+           :thingspeak-logs (rest (:thingspeak-logs state))
+           :last-thingspeak-log (:time state))))
+
+;; Todo: logging to thingspeak
+
+(defn perform-next-action
+  [state]
+  (let [[state next-action] (pop-action state)
+        _ (println (str "performing " (fn-name next-action)))
+        new-state (next-action state)]
+    (if (nil? new-state)
+      (do
+        (println "State was nil")
+        state)
+      new-state)))
+
+(defn should-perform-next-action?
+  [state]
+  (and
+   (seq (:actions state))
+   (or
+    (nil? (:sleep-until state))
+    (.isBefore (:time state) (:sleep-until state)))))
+
+(defn act
+  [state]
+  (let [state (assoc state :time (time-now))]
+    (if (should-log-to-thingspeak state)
+      (log-first-thingspeak state)
+      (if (empty? (:actions state))
+        (push-action state get-tesla-data)
+        (if (should-perform-next-action? state)
+          (perform-next-action state)
+          state
+          )))))
 
 (defn -main
   [& args]
   (println "Starting...")
 
-  (loop [state {:number 0 :actions [say-hello]}]
+  (loop [state {}]
     (let [new-state (act state)]
       (recur new-state))))
 

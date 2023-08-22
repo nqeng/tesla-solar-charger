@@ -9,7 +9,7 @@
 (def power-to-current-1-phase 231.25)
 (def power-to-current-2-phase 462.5)
 
-(defn get-vehicle-state
+(defn get-data
   ([tesla-vin tessie-token]
    (let [response
          (try
@@ -28,7 +28,7 @@
          json (json/parse-string (:body response))]
      json))
   ([]
-   (get-vehicle-state env/tesla-vin env/tessie-token)))
+   (get-data env/tesla-vin env/tessie-token)))
 
 (defn set-charge-amps
   "Sends a request to Tessie to set the charge speed of a Tesla vehicle.
@@ -59,11 +59,11 @@
   [tesla-state]
   (get-in tesla-state ["charge_state" "minutes_to_full_charge"]))
 
-(defn get-max-charge-amps
+(defn get-max-charge-rate
   [tesla-state]
   (get-in tesla-state ["charge_state" "charge_current_request_max"]))
 
-(defn get-charge-amps
+(defn get-charge-rate
   [tesla-state]
   (get-in tesla-state ["charge_state" "charge_amps"]))
 
@@ -81,8 +81,8 @@
 
 (defn get-minutes-to-full-charge-at-max-rate
   [tesla-state]
-  (-> (get-charge-amps tesla-state)
-      (/ (get-max-charge-amps tesla-state))
+  (-> (get-charge-rate tesla-state)
+      (/ (get-max-charge-rate tesla-state))
       (* (get-minutes-to-full-charge tesla-state))
       (int)))
 
@@ -107,7 +107,7 @@
   [tesla-state]
   (get-in tesla-state ["vehicle_state" "valet_mode"]))
 
-(defn is-charge-overridden?
+(defn is-override-active?
   [tesla-state]
   (is-in-valet-mode? tesla-state))
 
@@ -132,7 +132,7 @@
 
 (defn create-status-message
   [tesla-state]
-  (let [charge-amps (get-charge-amps tesla-state)
+  (let [charge-amps (get-charge-rate tesla-state)
         battery-level-percent (get-battery-level-percent tesla-state)
         minutes-to-full-charge (get-minutes-to-full-charge tesla-state)
         hours-to-full-charge (int (/ minutes-to-full-charge 60))]
