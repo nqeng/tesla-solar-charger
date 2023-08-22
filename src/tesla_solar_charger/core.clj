@@ -131,7 +131,7 @@
   [start end]
   (.until start end ChronoUnit/MINUTES))
 
-(defn calc-seconds-between-times
+(defn seconds-between-times
   [start end]
   (.until start end ChronoUnit/SECONDS))
 
@@ -181,7 +181,7 @@
       target-time (get-target-time current-time)
       time-left-minutes (calc-minutes-between-times current-time target-time)
       last-thingspeak-log-time (:last-thingspeak-log-time state)
-      time-since-last-thingspeak-log-seconds (calc-seconds-between-times last-thingspeak-log-time current-time)
+      time-since-last-thingspeak-log-seconds (seconds-between-times last-thingspeak-log-time current-time)
       thingspeak-logs (:thingspeak-logs state)
       next-thingspeak-log (first thingspeak-logs)
       sungrow-token (if (:sungrow-token state) (:sungrow-token state) (sungrow/login))
@@ -472,9 +472,11 @@
   (if (= new-charge-rate (tesla/get-charge-rate (:tesla-data state)))
     (-> state
         (push-action (fn [state] (tesla/set-charge-amps new-charge-rate) state))
-        (push-action (fn [state] (printf "Set tesla charge rate to %dA%n" new-charge-rate) state)))
+        (push-action (fn [state] (printf "Set tesla charge rate to %dA%n" new-charge-rate) state))
+        )
     (-> state
-        (push-action (fn [state] (printf "No change to Tesla charge rate%n") state)))))
+        (push-action (fn [state] (printf "No change to Tesla charge rate%n") state))
+        )))
 
 (defn set-tesla-charge-rate-to-max
   [state]
@@ -557,53 +559,63 @@
             (assoc :was-charging-previously false))
         (throw e)))))
 
-(defn should-log-to-thingspeak
+(defn is-delaying-thingspeak?
   [state]
-  (and (seq (:thingspeak-logs state))
-       (or
-        (nil? (:last-thingspeak-log state))
-        (> (calc-seconds-between-times (:last-thingspeak-log state) (:time state)) 30))))
+  (and (not (nil? (:delay-thingspeak-until state)))
+       (.isBefore (:time state) (:delay-thingspeak-until state))))
 
-(defn log-first-thingspeak
+(defn log-to-thingspeak
+  [& data]
+  (let [field-names (take-nth 2 data)
+        field-values (take-nth 2 (rest data))
+        url (apply str
+                   "https://api.thingspeak.com/update"
+                   "?"
+                   "api_key="
+                   "XP6ZEG2QSW9J3D2R"
+                   "&"
+                   (interpose "&" (map #(str %1 "=" %2) field-names field-values)))]
+    (client/get url)
+    ))
+
+; todo: imaginary keywords
+
+(defn log-next-thingspeak
   [state]
-  (let [next-thingspeak-log (first (:thingspeak-logs state))]
-    (log-to-thingspeak (first next-thingspeak-log) (last next-thingspeak-log))
-    (assoc state
-           :thingspeak-logs (rest (:thingspeak-logs state))
-           :last-thingspeak-log (:time state))))
+  (if (is-delaying-thingspeak? state)
+    state
+    (let [power-to-grid (:last-power-to-grid state)
+          charge-rate-amps (:new-charge-rate-amps state)
+          battery-percent (tesla/get-battery-level-percent (:tesla-data state))
+          power-to-tesla (:new-charge-rate-amps state)]
+      (log-to-thingspeak
+       "field1" (float power-to-grid)
+       "field2" (float charge-rate-amps)
+       "field3" (float battery-percent)
+       "field4" (float power-to-tesla))
+      state)))
 
-;; Todo: logging to thingspeak
+(defn is-sleeping?
+  [state]
+  (and (not (nil? (:sleep-until state)))
+       (.isBefore (:time state) (:sleep-until state))))
 
 (defn perform-next-action
   [state]
-  (let [[state next-action] (pop-action state)
-        _ (println (str "performing " (fn-name next-action)))
-        new-state (next-action state)]
-    (if (nil? new-state)
-      (do
-        (println "State was nil")
-        state)
-      new-state)))
-
-(defn should-perform-next-action?
-  [state]
-  (and
-   (seq (:actions state))
-   (or
-    (nil? (:sleep-until state))
-    (.isBefore (:time state) (:sleep-until state)))))
+  (if (is-sleeping? state)
+    state
+    (if (empty? (:actions state))
+      (push-action state get-tesla-data)
+      (let [[state next-action] (pop-action state)]
+        (println (str "performing " (fn-name next-action)))
+        (next-action state)))))
 
 (defn act
   [state]
-  (let [state (assoc state :time (time-now))]
-    (if (should-log-to-thingspeak state)
-      (log-first-thingspeak state)
-      (if (empty? (:actions state))
-        (push-action state get-tesla-data)
-        (if (should-perform-next-action? state)
-          (perform-next-action state)
-          state
-          )))))
+  (-> state
+      (assoc :time (time-now))
+      log-next-thingspeak
+      perform-next-action))
 
 (defn -main
   [& args]
