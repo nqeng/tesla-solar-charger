@@ -370,12 +370,14 @@
                     :last-thingspeak-log-time nil})
 
 (defn pop-action
-  [state]
-  [(assoc state :actions (vec (rest (:actions state)))) (first (:actions state))])
+  [actions]
+  [(first actions) (rest actions)]
+  )
 
 (defn push-action
-  [state action]
-  (assoc state :actions (conj (:actions state) action)))
+  [actions action]
+  (conj actions action)
+  )
 
 (defn fn-name
   [f]
@@ -390,12 +392,16 @@
   state)
 
 (defn log-message
-  [message]
+  [message state]
   (println message))
 
 (defn start-sleep
   [seconds state]
   (assoc state :sleep-until (.plusSeconds (:time state) seconds)))
+
+(defn update-thingspeak-data
+  [key value state]
+  (assoc-in state [:thingspeak-data key] value))
 
 (defn check-if-tesla-charge-rate-changed
   [state]
@@ -470,13 +476,20 @@
 (defn set-tesla-charge-rate
   [new-charge-rate state]
   (if (= new-charge-rate (tesla/get-charge-rate (:tesla-data state)))
-    (-> state
-        (push-action (fn [state] (tesla/set-charge-amps new-charge-rate) state))
-        (push-action (fn [state] (printf "Set tesla charge rate to %dA%n" new-charge-rate) state))
-        )
-    (-> state
-        (push-action (fn [state] (printf "No change to Tesla charge rate%n") state))
-        )))
+    (push-action state (partial log-message state "No change to Tesla charge rate%n"))
+    (try
+      (tesla/set-charge-amps new-charge-rate)
+      (-> state
+          (push-action (partial log-message (format "Set tesla charge rate to %dA" new-charge-rate)))
+          (push-action (partial update-thingspeak-data :tesla-charge-rate new-charge-rate)))
+      (catch clojure.lang.ExceptionInfo e
+        (case (:type (ex-data e))
+          :err-could-not-set-charge-amps
+          (-> state
+              (push-action (partial log-message "No change to Tesla charge rate"))
+              (push-action (partial update-thingspeak-data :tesla-charge-rate new-charge-rate)))
+
+          (throw e))))))
 
 (defn set-tesla-charge-rate-to-max
   [state]
@@ -575,8 +588,7 @@
                    "XP6ZEG2QSW9J3D2R"
                    "&"
                    (interpose "&" (map #(str %1 "=" %2) field-names field-values)))]
-    (client/get url)
-    ))
+    (client/get url)))
 
 ; todo: imaginary keywords
 
@@ -584,10 +596,10 @@
   [state]
   (if (is-delaying-thingspeak? state)
     state
-    (let [power-to-grid (:last-power-to-grid state)
-          charge-rate-amps (:new-charge-rate-amps state)
+    (let [power-to-grid (:power-to-grid state)
+          charge-rate-amps (tesla/get-charge-rate (:tesla-data state))
           battery-percent (tesla/get-battery-level-percent (:tesla-data state))
-          power-to-tesla (:new-charge-rate-amps state)]
+          power-to-tesla (tesla/get-charge-rate (:tesla-data state))]
       (log-to-thingspeak
        "field1" (float power-to-grid)
        "field2" (float charge-rate-amps)
@@ -601,29 +613,32 @@
        (.isBefore (:time state) (:sleep-until state))))
 
 (defn perform-next-action
-  [state]
+  [state actions]
   (if (is-sleeping? state)
-    state
-    (if (empty? (:actions state))
-      (push-action state get-tesla-data)
-      (let [[state next-action] (pop-action state)]
-        (println (str "performing " (fn-name next-action)))
-        (next-action state)))))
+    [state actions]
+    (if (empty? actions)
+      [state (conj actions get-tesla-data)]
+      (let [next-action (first actions)
+            actions (rest actions)
+            _ (printf "performing %s%n" (fn-name next-action))
+            [new-state next-actions] (next-action state)
+            new-actions (conj actions next-actions)]
+        [new-state new-actions]
+        ))))
 
-(defn act
-  [state]
+(defn main-loop
+  [state actions]
   (-> state
       (assoc :time (time-now))
-      log-next-thingspeak
-      perform-next-action))
+      (perform-next-action actions)))
 
 (defn -main
   [& args]
   (println "Starting...")
 
-  (loop [state {}]
-    (let [new-state (act state)]
-      (recur new-state))))
+  (loop [state {} actions []]
+    (let [[new-state new-actions] (main-loop state actions)]
+      (recur new-state new-actions))))
 
 ;(defn -main
 ;  [& args]
