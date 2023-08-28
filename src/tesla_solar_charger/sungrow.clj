@@ -28,7 +28,7 @@
         (.withMinute new-minutes)
         (.withSecond 0))))
 
-(defn get-most-recent-data-timestamp
+(defn get-latest-data-timestamp
   [datetime]
   (-> datetime
       (get-most-recent-minute-interval data-interval-minutes)

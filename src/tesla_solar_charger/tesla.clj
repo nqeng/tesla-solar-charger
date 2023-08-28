@@ -91,6 +91,11 @@
   (let [tesla-charge-state (get-tesla-charge-state tesla-state)]
     (= "Charging" tesla-charge-state)))
 
+(defn is-charging-complete?
+  [tesla-state]
+  (let [tesla-charge-state (get-tesla-charge-state tesla-state)]
+    (= "Complete" tesla-charge-state)))
+
 (defn get-battery-level-percent
   [tesla-state]
   (get-in tesla-state ["charge_state" "battery_level"]))

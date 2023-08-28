@@ -44,3 +44,4 @@
 (def target-percent (get-int "TARGET_PERCENT"))
 (def target-time-hour (get-int "TARGET_TIME_HOUR"))
 (def target-time-minute (get-int "TARGET_TIME_MINUTE"))
+(def thingspeak-api-key (get-env "THINGSPEAK_API_KEY"))

@@ -8,6 +8,7 @@
                  [clj-http "3.12.3"]
                  [cheshire "5.11.0"]
                  [lynxeyes/dotenv "1.1.0"]
+                 [org.clojure/data.priority-map "1.1.0"]
                  ]
   :main ^:skip-aot tesla-solar-charger.core
   :target-path "target/%s"
