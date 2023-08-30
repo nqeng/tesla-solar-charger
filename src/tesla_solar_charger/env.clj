@@ -1,34 +1,33 @@
 (ns tesla-solar-charger.env
   (:require
-    [dotenv :refer [env]])
-  )
+   [dotenv :refer [env]]))
 
 (defn get-env
   [var-name]
   (let [value (env var-name)]
     (if (not (nil? value))
       value
-      (throw (ex-info 
-               (format "Environment variable \"%s\" not found" var-name) 
-               {:type :environment-variable-not-found})))))
+      (throw (ex-info
+              (format "Environment variable \"%s\" not found" var-name)
+              {:type :environment-variable-not-found})))))
 
 (defn get-float
   [var-name]
   (try
     (Float/parseFloat (get-env var-name))
     (catch java.lang.NumberFormatException e
-      (throw (ex-info 
-               (format "Environment variable \"%s\" is not a valid number" var-name) 
-               {:type :environment-variable-not-found})))))
+      (throw (ex-info
+              (format "Environment variable \"%s\" is not a valid number" var-name)
+              {:type :environment-variable-not-found})))))
 
 (defn get-int
   [var-name]
   (try
     (Integer/parseInt (get-env var-name))
     (catch java.lang.NumberFormatException e
-      (throw (ex-info 
-               (format "Environment variable \"%s\" is not a valid number" var-name) 
-               {:type :environment-variable-not-found})))))
+      (throw (ex-info
+              (format "Environment variable \"%s\" is not a valid number" var-name)
+              {:type :environment-variable-not-found})))))
 
 (def sungrow-username (get-env "SUNGROW_USERNAME"))
 (def sungrow-password (get-env "SUNGROW_PASSWORD"))

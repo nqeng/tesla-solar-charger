@@ -89,7 +89,9 @@
 (defn is-charging?
   [tesla-state]
   (let [tesla-charge-state (get-tesla-charge-state tesla-state)]
-    (= "Charging" tesla-charge-state)))
+    (= "Charging" tesla-charge-state)
+    true
+    ))
 
 (defn is-charging-complete?
   [tesla-state]
@@ -129,7 +131,8 @@
                            charger-longitude
                            tesla-latitude
                            tesla-longitude)]
-     (< distance-between 0.0005)))
+     (< distance-between 0.0005)
+     true))
   ([tesla-state]
    (is-near-charger? tesla-state
                      env/charger-latitude

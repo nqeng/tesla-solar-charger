@@ -34,22 +34,18 @@
       (get-most-recent-minute-interval data-interval-minutes)
       (create-data-point-timestamp)))
 
-(defn send-login-request
-  [username password]
-  (client/post
-   "https://augateway.isolarcloud.com/v1/userService/login"
-   {:form-params {:appkey api-key
-                  :sys_code "900"
-                  :user_account username
-                  :user_password password}
-    :content-type :json}))
-
 (defn login
   "Sends a login request to Sungrow API, returning an auth token.
   Overloaded to use environment variables."
   ([username password]
    (let [response
-         (send-login-request username password)
+         (client/post
+          "https://augateway.isolarcloud.com/v1/userService/login"
+          {:form-params {:appkey api-key
+                         :sys_code "900"
+                         :user_account username
+                         :user_password password}
+           :content-type :json})
          json (json/parse-string (:body response))
          login-state (get-in json ["result_data" "login_state"])
          tries-left (get-in json ["result_data" "remain_times"])
@@ -159,7 +155,7 @@ Power available to Tesla: %.2fW"
          power-value-str (get-in json-data [grid-sensor-device meter-active-power data-timestamp] "--")]
      (if (= "--" power-value-str)
        nil
-         (- (Float/parseFloat power-value-str)))))
+       (- (Float/parseFloat power-value-str)))))
   ([token data-timestamp]
    (get-power-to-grid
     token
