@@ -117,9 +117,33 @@ Power available to Tesla: %.2fW"
     :content-type :json}))
 
 (defn get-data
-  [token start-timestamp end-timestamp data-devices data-points]
-  (let [response
-        (send-data-request token start-timestamp end-timestamp data-devices data-points)
+  [token start-time end-time & data-points]
+  (let [ps-keys (map first data-points)
+        points (map second data-points)
+        response
+        (try
+          (client/post
+           "https://augateway.isolarcloud.com/v1/commonService/queryMutiPointDataList"
+           {:form-params {:appkey api-key
+                          :sys_code "200"
+                          :token token
+                          :user_id ""
+                          :start_time_stamp (get-latest-data-timestamp start-time)
+                          :end_time_stamp (get-latest-data-timestamp end-time)
+                          :minute_interval data-interval-minutes
+                          :ps_key (str/join "," ps-keys)
+                          :points (str/join "," points)}
+            :content-type :json})
+          (catch java.net.UnknownHostException e
+            (let [error (.getMessage e)]
+              (throw (ex-info
+                      (str "Failed to get Tesla state; " error)
+                      {:type :network-error}))))
+          (catch java.net.NoRouteToHostException e
+            (let [error (.getMessage e)]
+              (throw (ex-info
+                      (str "Failed to get Tesla state; " error)
+                      {:type :network-error})))))
         json (json/parse-string (:body response))
         data (get json "result_data")
         error (get json "result_msg")
@@ -144,22 +168,42 @@ Power available to Tesla: %.2fW"
               (str "Sungrow data request failed; " error)
               {:type :err-could-not-get-sungrow-data})))))
 
+(require '[clj-http.client :as client])
+
+(login "reuben@nqeng.com.au" "absdq142")
+
+(get-latest-data-timestamp (java.time.LocalDateTime/now))
+
+(get-data
+ (login "reuben@nqeng.com.au" "absdq142")
+ (.minusMinutes (java.time.LocalDateTime/now) 30)
+ (java.time.LocalDateTime/now)
+ ["1152381_7_2_3" "p8018"]
+ ["1152381_7_2_3" "p8000"])
+
 (defn get-power-to-grid
-  ([token data-timestamp grid-sensor-device meter-active-power]
+  ([token time grid-sensor-device meter-active-power]
    (let [json-data (get-data
                     token
-                    data-timestamp
-                    data-timestamp
-                    [grid-sensor-device]
-                    [meter-active-power])
-         power-value-str (get-in json-data [grid-sensor-device meter-active-power data-timestamp] "--")]
+                    time
+                    time
+                    [grid-sensor-device meter-active-power])
+         power-value-str (get-in json-data [grid-sensor-device
+                                            meter-active-power
+                                            (get-latest-data-timestamp time)] "--")]
      (if (= "--" power-value-str)
        nil
        (- (Float/parseFloat power-value-str)))))
-  ([token data-timestamp]
+  ([token time]
    (get-power-to-grid
     token
-    data-timestamp
+    time
     env/grid-sensor-device-id
     env/grid-power-data-id)))
+
+(get-power-to-grid
+ (login "reuben@nqeng.com.au" "absdq142")
+ (.minusMinutes (java.time.LocalDateTime/now) 30)
+ "1152381_7_2_3"
+ "p8018")
 

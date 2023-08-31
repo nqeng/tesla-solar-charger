@@ -17,6 +17,17 @@
             (str "https://api.tessie.com/" tesla-vin "/state")
             {:oauth-token tessie-token
              :accept :json})
+
+           (catch java.net.UnknownHostException e
+             (let [error (.getMessage e)]
+               (throw (ex-info
+                       (str "Failed to get Tesla state; " error)
+                       {:type :network-error}))))
+           (catch java.net.NoRouteToHostException e
+             (let [error (.getMessage e)]
+               (throw (ex-info
+                       (str "Failed to get Tesla state; " error)
+                       {:type :network-error}))))
            (catch clojure.lang.ExceptionInfo e
              (let [error (-> (ex-data e)
                              (:body)
@@ -89,9 +100,7 @@
 (defn is-charging?
   [tesla-state]
   (let [tesla-charge-state (get-tesla-charge-state tesla-state)]
-    (= "Charging" tesla-charge-state)
-    true
-    ))
+    (= "Charging" tesla-charge-state)))
 
 (defn is-charging-complete?
   [tesla-state]
@@ -131,8 +140,7 @@
                            charger-longitude
                            tesla-latitude
                            tesla-longitude)]
-     (< distance-between 0.0005)
-     true))
+     (< distance-between 0.0005)))
   ([tesla-state]
    (is-near-charger? tesla-state
                      env/charger-latitude
