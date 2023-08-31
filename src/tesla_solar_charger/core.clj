@@ -34,7 +34,7 @@
     log-file-path))
 
 (defn log
-  [& args]
+  [type & args]
   (let [time (time-now)
         log-timestamp (format-time "yyyy-MM-dd HH:mm:ss" time)
         log-message (format "[%s] %s" log-timestamp (str/join "\n" args))
@@ -135,11 +135,22 @@
 
     (catch clojure.lang.ExceptionInfo e
       (case (:type (ex-data e))
+        :err-sungrow-login-auth
+        (throw e)
+
+        :err-sungrow-login-too-frequent
         (do
-          (log "Failed to login to Sungrow")
-          [(-> state
-               (dissoc :sungrow-token))
-           [(do-after 10 get-solar-data)]])))))
+          (log (ex-message e))
+          [state
+           [(do-after 30 login-to-sungrow)]])
+
+        :err-sungrow-login-other
+        (do
+          (log (ex-message e))
+          [state
+           [(do-after 10 login-to-sungrow)]])
+
+        (throw e)))))
 
 (defn is-new-solar-data-available?
   [state]
@@ -154,6 +165,7 @@
 
 (defn get-solar-data
   [state]
+  (log :verbose "Getting solar data")
   (let [latest-sungrow-timestamp (sungrow/get-latest-data-timestamp (time-now))]
     (cond
       (not (is-new-solar-data-available? state))
@@ -164,7 +176,7 @@
 
       (nil? (:sungrow-token state))
       (do
-        (log "Sungrow not logged in; re-authenticating...")
+        (log :debug "Sungrow not logged in; re-authenticating...")
         [state
          [(do-now login-to-sungrow)]])
 
@@ -196,7 +208,9 @@
             (do
               (log (ex-message e))
               [state
-               [(do-now get-solar-data)]])))))))
+               [(do-now login-to-sungrow)]])
+
+            (throw e)))))))
 
 (declare regulate-tesla-charge)
 
@@ -204,48 +218,25 @@
   []
   (calc-minutes-between-times (time-now) (get-target-time (time-now))))
 
-(defn calc-tesla-charge-rate
-  [state]
-  (let [current-rate-amps (tesla/get-charge-rate (:tesla-data state))
-        max-rate-amps (tesla/get-max-charge-rate (:tesla-data state))
-        excess-power (-> state
-                         :sungrow-data
-                         first
-                         :data
-                         (get "1152381_7_2_3")
-                         (get "p8018"))
-        available-power (- excess-power env/power-buffer-watts)
-        adjustment-rate-amps (-> available-power
-                                 (/ tesla/power-to-current-3-phase)
-                                 (limit (- env/max-drop-amps) env/max-climb-amps))
-        new-rate-amps (-> current-rate-amps
-                          (+ adjustment-rate-amps)
-                          float
-                          Math/round
-                          int
-                          (limit 0 max-rate-amps))
-        _ (printf "Excess power: %fW%n" excess-power)
-        _ (printf "Available power: %fW%n" available-power)
-        _ (printf "Adjustment rate: %s%fA%n"
-                  (if (neg? adjustment-rate-amps) "-" "+")
-                  (abs adjustment-rate-amps))
-        _ (printf "New rate: %dA%n" new-rate-amps)]
-    new-rate-amps))
-
 (defn did-tesla-stop-charging?
   [state]
   (and
    (not (nil? (:last-regulation state)))
-   (not (tesla/is-charging? (:tesla-data state)))
-   (tesla/is-charging? (:tesla-data (:last-regulation state)))))
+   (or
+    (not (tesla/is-charging? (:tesla-state state)))
+    (not (tesla/is-near-charger? (:tesla-state state))))
+   (tesla/is-charging? (:tesla-state (:last-regulation state)))
+   (tesla/is-near-charger? (:tesla-state (:last-regulation state)))))
 
 (defn did-tesla-start-charging?
   [state]
   (and
-   (tesla/is-charging? (:tesla-data state))
+   (tesla/is-charging? (:tesla-state state))
+   (tesla/is-near-charger? (:tesla-state state))
    (or
     (nil? (:last-regulation state))
-    (not (tesla/is-charging? (:tesla-data (:last-regulation state)))))))
+    (not (tesla/is-charging? (:tesla-state (:last-regulation state))))
+    (not (tesla/is-near-charger? (:tesla-state (:last-regulation state)))))))
 
 (defn has-regulated-this-solar-data?
   [state]
@@ -253,6 +244,7 @@
     (and
      (not (nil? last-regulation))
      (:used-solar-data last-regulation)
+     (:was-successful last-regulation)
      (= (:timestamp (last (:solar-data last-regulation)))
         (:timestamp (last (:solar-data state)))))))
 
@@ -268,8 +260,8 @@
   [state]
   (let [excess-power (get-excess-power state)
         available-power-watts (- excess-power env/power-buffer-watts)
-        current-rate-amps (tesla/get-charge-rate (:tesla-data state))
-        max-rate-amps (tesla/get-max-charge-rate (:tesla-data state))
+        current-rate-amps (tesla/get-charge-rate (:tesla-state state))
+        max-rate-amps (tesla/get-max-charge-rate (:tesla-state state))
         adjustment-rate-amps (-> available-power-watts
                                  (/ tesla/power-to-current-3-phase)
                                  (limit (- env/max-drop-amps) env/max-climb-amps))
@@ -281,14 +273,22 @@
                           (limit 0 max-rate-amps))]
     new-rate-amps))
 
+(def new-regulation
+  {:save-initial-state false
+   :current-rate-amps 0
+   :used-solar-data false
+   :solar-data nil
+   :tesla-state nil
+   :new-rate-amps nil
+   :message nil})
+
 (defn create-regulation-from-excess-solar
   [state]
-  (let [regulation {:solar-data (:solar-data state)
-                    :tesla-data (:tesla-data state)
-                    :used-solar-data false
-                    :new-rate-amps nil
-                    :current-rate-amps (tesla/get-charge-rate (:tesla-data state))
-                    :message nil}]
+  (let [current-charge-rate-amps (tesla/get-charge-rate (:tesla-state state))
+        regulation (-> new-regulation
+                       (assoc :current-rate-amps current-charge-rate-amps
+                              :solar-data (:solar-data state)
+                              :tesla-state (:tesla-state state)))]
 
     (cond
       (nil? (:solar-data state))
@@ -311,23 +311,25 @@
 
 (defn create-charge-rate-regulation
   [state]
-  (let [max-charge-rate-amps (tesla/get-max-charge-rate (:tesla-data state))
-        current-charge-rate-amps (tesla/get-charge-rate (:tesla-data state))
+  (let [max-charge-rate-amps (tesla/get-max-charge-rate (:tesla-state state))
+        current-charge-rate-amps (tesla/get-charge-rate (:tesla-state state))
         starting-charge-rate-amps 0
-        regulation {:current-rate-amps current-charge-rate-amps
-                    :used-solar-data false
-                    :solar-data (:solar-data state)
-                    :tesla-data (:tesla-data state)
-                    :new-rate-amps nil
-                    :message nil}]
+        regulation (-> new-regulation
+                       (assoc :current-rate-amps current-charge-rate-amps
+                              :solar-data (:solar-data state)
+                              :tesla-state (:tesla-state state)))]
 
     (cond
-      (nil? (:tesla-data state))
+      (nil? (:tesla-state state))
       regulation
+
+      (not (tesla/is-near-charger? (:tesla-state state)))
+      (-> regulation
+          (assoc :message (format "Tesla is not near the charger")))
 
       (did-tesla-stop-charging? state)
       (-> regulation
-          (assoc :new-rate-amps max-charge-rate-amps)
+          (assoc :new-rate-amps (tesla/get-charge-rate (:initial-tesla-state state)))
           (assoc :message (format "Tesla stopped charging; resetting to max rate (%dA)"
                                   max-charge-rate-amps)))
 
@@ -337,21 +339,21 @@
           (assoc :message (format "Tesla started charging; beginning at starting rate (%dA)"
                                   starting-charge-rate-amps)))
 
-      (tesla/is-charging-complete? (:tesla-data state))
+      (tesla/is-charging-complete? (:tesla-state state))
       (-> regulation
           (assoc :message (format "Charging complete")))
 
-      (not (tesla/is-charging? (:tesla-data state)))
+      (not (tesla/is-charging? (:tesla-state state)))
       (-> regulation
           (assoc :message (format "Tesla is not charging")))
 
-      (tesla/is-override-active? (:tesla-data state))
+      (tesla/is-override-active? (:tesla-state state))
       (-> regulation
           (assoc :new-rate-amps max-charge-rate-amps)
           (assoc :message (format "User override active; charging at max rate (%dA)"
                                   max-charge-rate-amps)))
 
-      (<= (get-time-left-minutes) (tesla/get-minutes-to-full-charge-at-max-rate (:tesla-data state)))
+      (<= (get-time-left-minutes) (tesla/get-minutes-to-full-charge-at-max-rate (:tesla-state state)))
       (-> regulation
           (assoc :new-rate-amps max-charge-rate-amps)
           (assoc :message (format "Auto override active to reach %s%% by %d:%d; charging at max rate (%dA)"
@@ -365,43 +367,63 @@
 
 (defn regulate-tesla-charge
   [state]
+  (log :verbose "Regulating charge speed...")
   (let [regulation (create-charge-rate-regulation state)]
     (when (not (nil? (:message regulation)))
       (log (:message regulation)))
     (if (nil? (:new-rate-amps regulation))
       [state [(do-after 10 regulate-tesla-charge)]]
-      (try
-        (if (not= (:new-rate-amps regulation) (:current-rate-amps regulation))
-          (do
+      (if (= (:new-rate-amps regulation) (:current-rate-amps regulation))
+        (do
+          (log "No change to charge rate")
+          [(-> state
+               (assoc :last-regulation (assoc regulation :was-successful true)))
+           [(do-after 10 regulate-tesla-charge)]])
+        (try
             ;(tesla/set-charge-amps (:new-rate-amps regulation))
-            (spit "test.json" (-> state
-                                  :tesla-data
-                                  (assoc-in ["charge_state" "charge_amps"] (:new-rate-amps regulation))
-                                  (json/generate-string {:pretty true})))
-            (log "Set Tesla charge rate"))
-          (log "No change to charge rate"))
-        [(-> state
-             (assoc :last-regulation regulation))
-         [(do-after 10 regulate-tesla-charge)]]
-        (catch clojure.lang.ExceptionInfo e
-          [state
-           [(do-after 10 regulate-tesla-charge)]])))))
+          (spit "test.json" (-> state
+                                :tesla-state
+                                (assoc-in ["charge_state" "charge_amps"] (:new-rate-amps regulation))
+                                (json/generate-string {:pretty true})))
+          (log "Set Tesla charge rate")
+          [(-> state
+               (assoc :last-regulation (assoc regulation :was-successful true)))
+           [do-after 10 regulate-tesla-charge]]
+          (catch clojure.lang.ExceptionInfo e
+            (case (:type (ex-data e))
+              :network-error
+              [(-> state
+                   (assoc :last-regulation (assoc regulation :was-successful false)))
+               [do-after 30 regulate-tesla-charge]]
 
-(defn update-tesla-state
+              (throw e))))))))
+
+(defn get-tesla-state
   [state]
-  (log "Updating Tesla state")
+  (log :verbose "Updating Tesla state")
   (try
     (let [;tesla-state (tesla/get-data)
           tesla-state (json/parse-string (slurp "test.json"))
-          new-state (-> state
-                        (assoc :tesla-data tesla-state))]
-      (if (not (tesla/is-near-charger? tesla-state))
+          state (-> state
+                    (assoc :tesla-state tesla-state))]
+      (cond
+        (did-tesla-start-charging? state)
         (do
-          (log "Tesla is not near the charger")
-          [new-state
-           [(do-after 10 update-tesla-state)]])
-        [new-state
-         [(do-after 10 update-tesla-state)]]))
+          [(-> state
+               (assoc :initial-tesla-state tesla-state))
+           [(do-after 10 get-tesla-state)]])
+
+        (not (tesla/is-near-charger? (:tesla-state state)))
+        [state
+         [(do-after 60 get-tesla-state)]]
+
+        (not (tesla/is-charging? (:tesla-state state)))
+        [state
+         [(do-after 30 get-tesla-state)]]
+
+        :else
+        [state
+         [(do-after 10 get-tesla-state)]]))
 
     (catch clojure.lang.ExceptionInfo e
       (case (:type (ex-data e))
@@ -409,12 +431,14 @@
         (do
           (log (ex-message e))
           [state
-           [(do-after 10 update-tesla-state)]])
+           [(do-after 10 get-tesla-state)]])
+
         :network-error
         (do
           (log (ex-message e))
           [state
-           [(do-after 10 update-tesla-state)]])
+           [(do-after 10 get-tesla-state)]])
+
         (throw e)))))
 
 (defn log-to-thingspeak
@@ -440,43 +464,27 @@
 (defn publish-thingspeak-data
   [state]
   (log "Publishing data to thingspeak")
-  (println (:solar-data state))
-  (try
-    (let [power-to-grid (get-in (last (:solar-data state)) ["1152381_7_2_3" "p8018"] 0)
-          _ (println power-to-grid)
-          charge-rate-amps (get-in (:tesla-data state) ["charge_state" "charge_amps"] 0)
-          battery-percent (get-in (:tesla-data state) ["charge_state" "battery_level"] 0)
-          power-to-tesla (* charge-rate-amps tesla/power-to-current-3-phase)]
-      (try
-        (log-to-thingspeak
-         "field1" (float power-to-grid)
-         "field2" (float charge-rate-amps)
-         "field3" (float battery-percent)
-         "field4" (float power-to-tesla))
-        (catch clojure.lang.ExceptionInfo e
+  (let [power-to-grid (get-in (last (:solar-data state)) ["1152381_7_2_3" "p8018"] 0)
+        charge-rate-amps (get-in (:tesla-state state) ["charge_state" "charge_amps"] 0)
+        battery-percent (get-in (:tesla-state state) ["charge_state" "battery_level"] 0)
+        power-to-tesla (* charge-rate-amps tesla/power-to-current-3-phase)]
+    (try
+      (log-to-thingspeak
+       "field1" (float power-to-grid)
+       "field2" (float charge-rate-amps)
+       "field3" (float battery-percent)
+       "field4" (float power-to-tesla))
+      [state
+       [(do-after 30 publish-thingspeak-data)]]
+      (catch clojure.lang.ExceptionInfo e
+        (case (:type (ex-data e))
+          :network-error
           (do
             (log (ex-message e))
             [state
-             [(do-after 30 publish-thingspeak-data)]])))
+             [(do-after 10 publish-thingspeak-data)]])
 
-      [state
-       [(do-after 30 publish-thingspeak-data)]])
-
-    (catch java.net.UnknownHostException e
-      (do
-        (log (format "Network error; %s" (.getMessage e)))
-        [state
-         [(do-after 10 publish-thingspeak-data)]]))
-
-    (catch java.net.NoRouteToHostException e
-      (do
-        (log (format "Network error; %s" (.getMessage e)))
-        [state
-         [(do-after 10 publish-thingspeak-data)]]))
-
-    (catch clojure.lang.ExceptionInfo e
-      (case (:type (ex-data e))
-        (throw e)))))
+          (throw e))))))
 
 (defn main-loop
   [state actions]
@@ -490,7 +498,7 @@
 
 (def initial-actions
   [(do-now (partial log-message "Started"))
-   (do-now update-tesla-state)
+   (do-now get-tesla-state)
    (do-now login-to-sungrow)
    (do-after 10 regulate-tesla-charge)
    (do-after 10 publish-thingspeak-data)])
