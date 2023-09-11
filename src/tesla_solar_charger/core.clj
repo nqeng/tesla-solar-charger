@@ -440,43 +440,30 @@
 (defn publish-thingspeak-data
   [state]
   (log "Publishing data to thingspeak")
-  (println (:solar-data state))
-  (try
-    (let [power-to-grid (get-in (last (:solar-data state)) ["1152381_7_2_3" "p8018"] 0)
-          _ (println power-to-grid)
-          charge-rate-amps (get-in (:tesla-data state) ["charge_state" "charge_amps"] 0)
-          battery-percent (get-in (:tesla-data state) ["charge_state" "battery_level"] 0)
-          power-to-tesla (* charge-rate-amps tesla/power-to-current-3-phase)]
-      (try
-        (log-to-thingspeak
-         "field1" (float power-to-grid)
-         "field2" (float charge-rate-amps)
-         "field3" (float battery-percent)
-         "field4" (float power-to-tesla))
-        (catch clojure.lang.ExceptionInfo e
+  (let [power-to-grid (get-in (last (:solar-data state)) ["1152381_7_2_3" "p8018"] 0)
+        charge-rate-amps (get-in (:tesla-data state) ["charge_state" "charge_amps"] 0)
+        battery-percent (get-in (:tesla-data state) ["charge_state" "battery_level"] 0)
+        power-to-tesla (* charge-rate-amps tesla/power-to-current-3-phase)]
+    (try
+      (log-to-thingspeak
+       "field1" (float power-to-grid)
+       "field2" (float charge-rate-amps)
+       "field3" (float battery-percent)
+       "field4" (float power-to-tesla))
+      [state
+       [(do-after 30 publish-thingspeak-data)]]
+      (catch clojure.lang.ExceptionInfo e
+        (case (:type (ex-data e))
+          :err-could-not-get-tesla-state
           (do
             (log (ex-message e))
             [state
-             [(do-after 30 publish-thingspeak-data)]])))
-
-      [state
-       [(do-after 30 publish-thingspeak-data)]])
-
-    (catch java.net.UnknownHostException e
-      (do
-        (log (format "Network error; %s" (.getMessage e)))
-        [state
-         [(do-after 10 publish-thingspeak-data)]]))
-
-    (catch java.net.NoRouteToHostException e
-      (do
-        (log (format "Network error; %s" (.getMessage e)))
-        [state
-         [(do-after 10 publish-thingspeak-data)]]))
-
-    (catch clojure.lang.ExceptionInfo e
-      (case (:type (ex-data e))
-        (throw e)))))
+             [(do-after 30 publish-thingspeak-data)]])
+          :network-error
+          (do
+            (log (ex-message e))
+            [state
+             [(do-after 30 publish-thingspeak-data)]]))))))
 
 (defn main-loop
   [state actions]
