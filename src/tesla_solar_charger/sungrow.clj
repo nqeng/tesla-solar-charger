@@ -59,27 +59,27 @@
        (= "0" login-state)
        (throw (ex-info
                (str "Sungrow login failed; authentication error (" tries-left " tries left)")
-               {:type :err-sungrow-auth-failure}))
+               {:type :err-sungrow-login-auth}))
        (= "-1" login-state)
        (throw (ex-info
                "Sungrow login failed; invalid username"
-               {:type :err-sungrow-auth-failure}))
+               {:type :err-sungrow-login-auth}))
        (= "2" login-state)
        (throw (ex-info
                "Sungrow login failed; too many failed attempts"
-               {:type :err-sungrow-auth-failure}))
+               {:type :err-sungrow-login-auth}))
        (= "E916" error-code)
        (throw (ex-info
                "Sungrow login failed; Login too frequently"
-               {:type :err-sungrow-login-too-frequently}))
+               {:type :err-sungrow-login-too-frequent}))
        (= "009" error-code)
        (throw (ex-info
                "Sungrow login failed; Username or password empty"
-               {:type :err-sungrow-auth-failure}))
+               {:type :err-sungrow-login-auth}))
        :else
        (throw (ex-info
                (str "Sungrow login failed; " error)
-               {:type :err-sungrow-login-failed})))))
+               {:type :err-sungrow-login-other})))))
 
   ([]
    (login env/sungrow-username env/sungrow-password)))
