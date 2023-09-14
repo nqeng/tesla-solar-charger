@@ -25,15 +25,21 @@
 
 (defn round-up-to-minute-interval
   [datetime interval-minutes]
-  (let [minutes (.getMinute datetime)
-        new-minutes (* interval-minutes (Math/ceil (/ minutes interval-minutes)))]
+  (let [hours (.getHour datetime)
+        minutes (.getMinute datetime)
+        seconds (.getSecond datetime)
+        [minutes seconds] (if (> seconds 0) [(+ 1 minutes) 0] [minutes seconds])
+        minutes (* interval-minutes (Math/ceil (/ minutes interval-minutes)))
+        [hours minutes] (if (> minutes 60) [(+ 1 hours) 0] [hours minutes])]
     (-> datetime
-        (.withMinute new-minutes)
-        (.withSecond 0))))
+        (.withHour hours)
+        (.withMinute minutes)
+        (.withSecond seconds)
+        (.withNano 0))))
 
 (defn get-latest-data-publish-time
   []
-  (round-down-to-minute-interval (java.time.LocalDateTIme/now) data-interval-minutes))
+  (round-down-to-minute-interval (java.time.LocalDateTime/now) data-interval-minutes))
 
 (defn get-last-data-timestamp
   ([datetime]
