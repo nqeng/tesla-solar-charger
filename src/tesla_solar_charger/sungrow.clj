@@ -15,12 +15,7 @@
    datetime
    (java.time.format.DateTimeFormatter/ofPattern "yyyyMMddHHmmss")))
 
-(defn get-most-recent-minute-interval
-  "Returns the datetime at the most recent multiple of n minutes.
-  Example with interval of 5:
-  12:46:01 => 12:45:00
-  13:40:55 => 13:40:00
-  14:00:00 => 14:00:00"
+(defn round-down-to-minute-interval
   [datetime interval-minutes]
   (let [minutes (.getMinute datetime)
         new-minutes (* interval-minutes (Math/floor (/ minutes interval-minutes)))]
@@ -28,11 +23,38 @@
         (.withMinute new-minutes)
         (.withSecond 0))))
 
-(defn get-latest-data-timestamp
+(defn round-up-to-minute-interval
+  [datetime interval-minutes]
+  (let [minutes (.getMinute datetime)
+        new-minutes (* interval-minutes (Math/ceil (/ minutes interval-minutes)))]
+    (-> datetime
+        (.withMinute new-minutes)
+        (.withSecond 0))))
+
+(defn get-latest-data-publish-time
+  []
+  (round-down-to-minute-interval (java.time.LocalDateTIme/now) data-interval-minutes))
+
+(defn get-last-data-timestamp
+  ([datetime]
+   (-> datetime
+       (round-down-to-minute-interval data-interval-minutes)
+       (create-data-point-timestamp)))
+  ([]
+   (-> (java.time.LocalDateTime/now)
+       (round-down-to-minute-interval data-interval-minutes)
+       (create-data-point-timestamp))))
+
+(defn get-next-data-timestamp
   [datetime]
   (-> datetime
-      (get-most-recent-minute-interval data-interval-minutes)
+      (round-up-to-minute-interval data-interval-minutes)
       (create-data-point-timestamp)))
+
+(defn get-next-data-publish-time
+  [datetime]
+  (-> datetime
+      (round-up-to-minute-interval data-interval-minutes)))
 
 (defn login
   "Sends a login request to Sungrow API, returning an auth token.
@@ -84,38 +106,6 @@
   ([]
    (login env/sungrow-username env/sungrow-password)))
 
-(defn create-status-message
-  ([data-timestamp
-    power-to-grid-watts
-    power-buffer-watts]
-   (format "Data point timestamp: %s
-Power feeding to grid: %.2fW
-Power available to Tesla: %.2fW"
-           data-timestamp
-           (float power-to-grid-watts)
-           (float (- power-to-grid-watts power-buffer-watts))))
-  ([data-timestamp
-    power-to-grid-watts]
-   (create-status-message
-    data-timestamp
-    power-to-grid-watts
-    env/power-buffer-watts)))
-
-(defn send-data-request
-  [token start-timestamp end-timestamp data-devices data-points]
-  (client/post
-   "https://augateway.isolarcloud.com/v1/commonService/queryMutiPointDataList"
-   {:form-params {:appkey api-key
-                  :sys_code "200"
-                  :token token
-                  :user_id ""
-                  :start_time_stamp start-timestamp
-                  :end_time_stamp end-timestamp
-                  :minute_interval data-interval-minutes
-                  :ps_key (str/join "," data-devices)
-                  :points (str/join "," data-points)}
-    :content-type :json}))
-
 (defn get-data
   [token start-time end-time & data-points]
   (let [ps-keys (map first data-points)
@@ -128,8 +118,8 @@ Power available to Tesla: %.2fW"
                           :sys_code "200"
                           :token token
                           :user_id ""
-                          :start_time_stamp (get-latest-data-timestamp start-time)
-                          :end_time_stamp (get-latest-data-timestamp end-time)
+                          :start_time_stamp (get-last-data-timestamp start-time)
+                          :end_time_stamp (get-last-data-timestamp end-time)
                           :minute_interval data-interval-minutes
                           :ps_key (str/join "," ps-keys)
                           :points (str/join "," points)}
@@ -137,12 +127,12 @@ Power available to Tesla: %.2fW"
           (catch java.net.UnknownHostException e
             (let [error (.getMessage e)]
               (throw (ex-info
-                      (str "Failed to get Tesla state; " error)
+                      (str "Network error; " error)
                       {:type :network-error}))))
           (catch java.net.NoRouteToHostException e
             (let [error (.getMessage e)]
               (throw (ex-info
-                      (str "Failed to get Tesla state; " error)
+                      (str "Network error; " error)
                       {:type :network-error})))))
         json (json/parse-string (:body response))
         data (get json "result_data")
@@ -168,18 +158,18 @@ Power available to Tesla: %.2fW"
               (str "Sungrow data request failed; " error)
               {:type :err-could-not-get-sungrow-data})))))
 
-(require '[clj-http.client :as client])
+(comment (require '[clj-http.client :as client]))
 
-(login "reuben@nqeng.com.au" "absdq142")
+(comment (login "reuben@nqeng.com.au" "absdq142"))
 
-(get-latest-data-timestamp (java.time.LocalDateTime/now))
+(comment (get-last-data-timestamp (java.time.LocalDateTime/now)))
 
-(get-data
- (login "reuben@nqeng.com.au" "absdq142")
- (.minusMinutes (java.time.LocalDateTime/now) 30)
- (java.time.LocalDateTime/now)
- ["1152381_7_2_3" "p8018"]
- ["1152381_7_2_3" "p8000"])
+(comment (get-data
+          (login "reuben@nqeng.com.au" "absdq142")
+          (.minusMinutes (java.time.LocalDateTime/now) 30)
+          (java.time.LocalDateTime/now)
+          ["1152381_7_2_3" "p8018"]
+          ["1152381_7_2_3" "p8000"]))
 
 (defn get-power-to-grid
   ([token time grid-sensor-device meter-active-power]
@@ -190,7 +180,7 @@ Power available to Tesla: %.2fW"
                     [grid-sensor-device meter-active-power])
          power-value-str (get-in json-data [grid-sensor-device
                                             meter-active-power
-                                            (get-latest-data-timestamp time)] "--")]
+                                            (get-last-data-timestamp time)] "--")]
      (if (= "--" power-value-str)
        nil
        (- (Float/parseFloat power-value-str)))))
@@ -201,9 +191,10 @@ Power available to Tesla: %.2fW"
     env/grid-sensor-device-id
     env/grid-power-data-id)))
 
-(get-power-to-grid
- (login "reuben@nqeng.com.au" "absdq142")
- (.minusMinutes (java.time.LocalDateTime/now) 30)
- "1152381_7_2_3"
- "p8018")
+(comment
+  (get-power-to-grid
+   (login "reuben@nqeng.com.au" "absdq142")
+   (.minusMinutes (java.time.LocalDateTime/now) 30)
+   "1152381_7_2_3"
+   "p8018"))
 

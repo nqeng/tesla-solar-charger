@@ -41,7 +41,7 @@
   ([]
    (get-data env/tesla-vin env/tessie-token)))
 
-(defn set-charge-amps
+(defn set-charge-rate
   "Sends a request to Tessie to set the charge speed of a Tesla vehicle.
   Overloaded to use environment variables."
   ([tesla-vin tessie-token charge-speed-amps]
@@ -64,7 +64,7 @@
                  (str "Failed to set Tesla charge amps; " error)
                  {:type :err-could-not-set-charge-amps}))))))
   ([charge-speed-amps]
-   (set-charge-amps env/tesla-vin env/tessie-token charge-speed-amps)))
+   (set-charge-rate env/tesla-vin env/tessie-token charge-speed-amps)))
 
 (defn get-minutes-to-full-charge
   [tesla-state]
