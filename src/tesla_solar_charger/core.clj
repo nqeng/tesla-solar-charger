@@ -327,8 +327,7 @@
 
               (nil? solar-data)
               (-> result
-                  (assoc :message "No solar data")
-                  )
+                  (assoc :message "No solar data"))
 
               (nil? (get-excess-power solar-data))
               (-> result
@@ -373,10 +372,10 @@
             last-regulation (if (not (nil? (:regulation result)))
                               (:regulation result)
                               last-regulation)
-            first-regulation (if (:started-regulating result)
+            first-regulation (if (true? (:started-regulating result))
                                (:regulation result)
                                first-regulation)
-            solar-data (if (:solar-data result)
+            solar-data (if (not (nil? (:solar-data result)))
                          (:solar-data result)
                          solar-data)]
 
@@ -413,6 +412,105 @@
                   (str "Failed to get Tesla state; " error)
                   {:type :network-error})))))))
 
+#_(defn publish-thingspeak-data
+    [state]
+    (log "Publishing data to thingspeak")
+    (let [power-to-grid (get-in (last (:solar-data state)) ["1152381_7_2_3" "p8018"] 0)
+          charge-rate-amps (get-in (:tesla-state state) ["charge_state" "charge_amps"] 0)
+          battery-percent (get-in (:tesla-state state) ["charge_state" "battery_level"] 0)
+          power-to-tesla (* charge-rate-amps tesla/power-to-current-3-phase)]
+      (try
+        (log-to-thingspeak
+         "field1" (float power-to-grid)
+         "field2" (float charge-rate-amps)
+         "field3" (float battery-percent)
+         "field4" (float power-to-tesla))
+        [state
+         [(do-after 30 publish-thingspeak-data)]]
+        (catch clojure.lang.ExceptionInfo e
+          (case (:type (ex-data e))
+            :err-could-not-get-tesla-state
+            (do
+              (log (ex-message e))
+              [state
+               [(do-after 30 publish-thingspeak-data)]])
+            :network-error
+            (do
+              (log (ex-message e))
+              [state
+               [(do-after 30 publish-thingspeak-data)]])
+
+            (throw e))))))
+
+(defn log-data
+  [tesla->logger solar->logger tesla-data solar-data]
+  (let [result nil]
+    (try
+      (let [[value channel] (async/alts!! [tesla->logger solar->logger (async/timeout 100)])]
+        (cond
+          (= tesla->logger channel)
+          (-> result
+              (assoc :message (format "Received Tesla data: {t=%s, %s keys} <- channel" (get-in value ["charge_state" "timestamp"]) (count value)))
+              (assoc :tesla-data value))
+
+          (= solar->logger channel)
+          (-> result
+              (assoc :message (format "Received solar data: %s <- channel" value))
+              (assoc :solar-data value))
+
+          :else
+          (let [power-to-grid (get-in (last solar-data) ["1152381_7_2_3" "p8018"] 0)
+                charge-rate-amps (get-in tesla-data ["charge_state" "charge_amps"] 0)
+                battery-percent (get-in tesla-data ["charge_state" "battery_level"] 0)
+                power-to-tesla (* charge-rate-amps tesla/power-to-current-3-phase)]
+            (log-to-thingspeak
+             "field1" (float power-to-grid)
+             "field2" (float charge-rate-amps)
+             "field3" (float battery-percent)
+             "field4" (float power-to-tesla))
+            (-> result
+                (assoc :delay 30000)
+                (assoc :message (format "Logged to ThingSpeak: field1=%s field2=%s field3=%s field4=%s"
+                                        (float power-to-grid)
+                                        (float charge-rate-amps)
+                                        (float battery-percent)
+                                        (float power-to-tesla)))))))
+
+      (catch clojure.lang.ExceptionInfo e
+        (case (:type (ex-data e))
+          (throw e)))
+
+      (catch Exception e
+        (throw e)))))
+
+(defn log-data-loop
+  [tesla->logger solar->logger error-chan]
+  (try
+    (loop [last-result nil
+           last-tesla-data nil
+           last-solar-data nil]
+      (log :verbose "[Logger] Logging tesla data")
+      (let [result (log-data tesla->logger solar->logger last-tesla-data last-solar-data)
+            tesla-data (if (not (nil? (:tesla-data result)))
+                         (:tesla-data result)
+                         last-tesla-data)
+            solar-data (if (not (nil? (:solar-data result)))
+                         (:solar-data result)
+                         last-solar-data)]
+
+        (when (not (nil? (:message result)))
+          (log :info (format "[Logger] %s" (:message result))))
+
+        (when (not (nil? (:delay result)))
+          (log :info (format "[Logger] Waiting for %ss%n" (int (/ (:delay result) 1000))))
+          (Thread/sleep (:delay result)))
+
+        (recur result tesla-data solar-data)))
+    (catch clojure.lang.ExceptionInfo e
+      (async/>!! error-chan e))
+    (catch Exception e
+      (async/>!! error-chan e))))
+
 (defn -main
   [& args]
   (let [error-chan (async/chan (async/dropping-buffer 1))
@@ -437,6 +535,12 @@
       (regulate-tesla-charge-loop
        tesla->regulator
        solar->regulator
+       error-chan))
+
+    (async/thread
+      (log-data-loop
+       tesla->logger
+       solar->logger
        error-chan))
 
     #_(Thread/sleep 10000)
