@@ -27,6 +27,10 @@
   []
   (LocalDateTime/now))
 
+(defn time-after-seconds
+  [seconds]
+  (.plusSeconds (time-now) seconds))
+
 (defn make-log-file-path
   [time]
   (let [year-folder (format-time "yy" time)
@@ -76,40 +80,28 @@
   [start end]
   (.until start end ChronoUnit/MILLIS))
 
-(defn fn-name
-  [f]
-  (clojure.string/replace (first (re-find #"(?<=\$)([^@]+)(?=@)" (str f))) "_" "-"))
-
 (defn get-time-left-minutes
   []
   (calc-minutes-between-times (time-now) (get-target-time (time-now))))
 
-(defn get-excess-power
-  [state]
-  (-> state
-      :solar-data
-      last
-      (get "1152381_7_2_3")
-      (get "p8018")))
-
 (defn update-tesla-data
-  [tesla->regulator tesla->logger]
+  [tesla->regulator tesla->logger log-chan]
   (let [result {}]
     (try
       (let [tesla-data
             #_(tesla/get-data) (json/parse-string (slurp "test.json"))
             delay (cond
                     (not (tesla/is-near-charger? tesla-data))
-                    60000
+                    60
 
                     (not (tesla/is-charging? tesla-data))
-                    30000
+                    30
 
                     :else
-                    10000)
+                    10)
             result (-> result
                        (assoc :tesla-state tesla-data)
-                       (assoc :delay delay))]
+                       (assoc :delay-until (time-after-seconds delay)))]
 
         (cond
           (false? (async/>!! tesla->regulator tesla-data))
@@ -119,8 +111,11 @@
           (throw (ex-info "Channel tesla->logger closed!" {}))
 
           :else
-          (-> result
-              (assoc :message (format "Send Tesla data: {t=%s, %s keys} -> channel" (get-in tesla-data ["charge_state" "timestamp"]) (count tesla-data))))))
+          (do
+            (async/>!! log-chan (format "[Tesla] Send Tesla data: {t=%s, %s keys} -> channel"
+                                        (get-in tesla-data ["charge_state" "timestamp"])
+                                        (count tesla-data)))
+            result)))
 
       (catch clojure.lang.ExceptionInfo e
         (case (:type (ex-data e))
@@ -130,17 +125,18 @@
         (throw e)))))
 
 (defn update-tesla-data-loop
-  [tesla->regulator tesla->logger error-chan]
+  [tesla->regulator tesla->logger log-chan error-chan]
   (try
     (loop [last-result nil]
-      (log :verbose "[Tesla] Updating Tesla state")
-      (let [result (update-tesla-data tesla->regulator tesla->logger)]
-        (when (not (nil? (:message result)))
-          (log :info (format "[Tesla] %s%n" (:message result))))
+      (async/>!! log-chan "[Tesla] Working...")
+      (let [result (update-tesla-data tesla->regulator tesla->logger log-chan)]
 
-        (when (not (nil? (:delay result)))
-          (log :info (format "[Tesla] Waiting for %ss%n" (int (/ (:delay result) 1000))))
-          (Thread/sleep (:delay result)))
+        (when-some [delay-until (:delay-until result)]
+          (when (.isAfter delay-until (time-now))
+            (async/>!! log-chan (format "[Tesla] Next run in %ss (%s)"
+                                        (seconds-between-times (time-now) delay-until)
+                                        delay-until))
+            (Thread/sleep (millis-between-times (time-now) delay-until))))
 
         (recur result)))
     (catch clojure.lang.ExceptionInfo e
@@ -149,22 +145,24 @@
       (async/>!! error-chan e))))
 
 (defn update-solar-data
-  [solar->regulator solar->logger sungrow-token]
+  [solar->regulator solar->logger log-chan sungrow-token]
   (let [result {:sungrow-token sungrow-token}]
 
     (if (nil? sungrow-token)
       (try
         (let [sungrow-token (sungrow/login)]
-          (-> result
-              (assoc :message (format "Logged in to Sungrow: token %s" sungrow-token))
-              (assoc :sungrow-token sungrow-token)))
+          (do
+            (async/>!! log-chan (format "[Solar] Logged in to Sungrow: token %s" sungrow-token))
+            (-> result
+                (assoc :sungrow-token sungrow-token))))
         (catch clojure.lang.ExceptionInfo e
           (case (:type (ex-data e))
 
             :err-sungrow-login-too-frequent
-            (-> result
-                (assoc :message (ex-message e))
-                (assoc :delay 60000))
+            (do
+              (async/>!! log-chan (ex-message e))
+              (-> result
+                  (assoc :delay-until (time-after-seconds 60))))
 
             (throw e)))
         (catch Exception e
@@ -172,17 +170,16 @@
 
       (try
         (let [current-time (time-now)
-              solar-data (sungrow/get-power-to-grid sungrow-token current-time)
+              power-to-grid-watts (sungrow/get-power-to-grid sungrow-token current-time)
+              solar-data [{:timestamp (time-now) :power-to-grid-watts power-to-grid-watts}]
               result (assoc result :solar-data solar-data)
-              next-data-publish-time (sungrow/get-next-data-publish-time current-time)
-              _ (log :info (format "[Solar] Next data point is at %s" next-data-publish-time))
-              millis-until-next-data (-> (millis-between-times current-time next-data-publish-time)
-                                         (+ 40000))]
+              next-data-publish-time (.plusSeconds (sungrow/get-next-data-publish-time current-time) 40)]
           (cond
             (nil? solar-data)
-            (-> result
-                (assoc :message "Solar data not published yet")
-                (assoc :delay 40000))
+            (do
+              (async/>!! log-chan "[Solar] data not published yet")
+              (-> result
+                  (assoc :delay-until (time-after-seconds 40))))
 
             (false? (async/>!! solar->regulator solar-data))
             (throw (ex-info "Channel solar->regulator closed!" {}))
@@ -191,34 +188,40 @@
             (throw (ex-info "Channel solar->logger closed!" {}))
 
             :else
-            (-> result
-                (assoc :message (format "Sent Sungrow data %s -> channel" solar-data))
-                (assoc :delay millis-until-next-data))))
+            (do
+              (async/>!! log-chan (format "[Solar] Sent solar data: {t=%s, %s keys} -> channel"
+                                          (:timestamp (last solar-data))
+                                          (count (last solar-data))))
+              (async/>!! log-chan (format "[Solar] Next data point is at %s" next-data-publish-time))
+              (-> result
+                  (assoc :delay-until next-data-publish-time)))))
         (catch clojure.lang.ExceptionInfo e
           (case (:type (ex-data e))
 
             :err-sungrow-auth-failed
-            (-> result
-                (assoc :message "Sungrow not logged in")
-                (assoc :sungrow-token nil))
+            (do
+              (async/>!! log-chan "[Solar] Sungrow not logged in")
+              (-> result
+                  (assoc :sungrow-token nil)))
 
             (throw e)))
         (catch Exception e
           (throw e))))))
 
 (defn update-solar-data-loop
-  [solar->regulator solar->logger error-chan]
+  [solar->regulator solar->logger log-chan error-chan]
   (try
     (loop [last-result nil]
-      (log :verbose "[Solar] Updating solar data")
+      (async/>!! log-chan "[Solar] Working...")
       (let [sungrow-token (:sungrow-token last-result)
-            result (update-solar-data solar->regulator solar->logger sungrow-token)]
-        (when (not (nil? (:message result)))
-          (log :info (format "[Solar] %s" (:message result))))
+            result (update-solar-data solar->regulator solar->logger log-chan sungrow-token)]
 
-        (when (not (nil? (:delay result)))
-          (log :info (format "[Solar] Waiting for %ss%n" (int (/ (:delay result) 1000))))
-          (Thread/sleep (:delay result)))
+        (when-some [delay-until (:delay-until result)]
+          (when (.isAfter delay-until (time-now))
+            (async/>!! log-chan (format "[Solar] Next run in %ss (%s)"
+                                        (seconds-between-times (time-now) delay-until)
+                                        delay-until))
+            (Thread/sleep (millis-between-times (time-now) delay-until))))
 
         (recur result)))
     (catch clojure.lang.ExceptionInfo e
@@ -255,8 +258,8 @@
       (:timestamp (last solar-data)))))
 
 (defn regulate-tesla-charge
-  [tesla->regulator solar->regulator last-regulation first-regulation solar-data]
-  (let [result {:delay 10000}]
+  [tesla->regulator solar->regulator log-chan last-regulation first-regulation solar-data]
+  (let [result {:delay-until (time-after-seconds 10)}]
     (try
       (let [[value channel] (async/alts!! [tesla->regulator solar->regulator])]
 
@@ -265,76 +268,84 @@
           (throw (ex-info "Channel closed!" {}))
 
           (= channel solar->regulator)
-          (-> result
-              (assoc :solar-data value)
-              (assoc :delay nil)
-              (assoc :message (format "Received solar data: %s <- channel" value)))
+          (do
+            (async/>!! log-chan (format "[Regulator] Received solar data: {t=%s, %s keys} <- channel" (:timestamp (last value)) (count (last value))))
+            (-> result
+                (assoc :solar-data value)
+                (assoc :delay-until nil)))
 
           :else
           (let [tesla-data value
                 regulation {:solar-data solar-data
                             :tesla-data tesla-data}]
-            (log :info (format "[Regulator] Received Tesla data: {t=%s, %s keys} <- channel" (get-in tesla-data ["charge_state" "timestamp"]) (count tesla-data)))
+            (async/>!! log-chan (format "[Regulator] Received Tesla data: {t=%s, %s keys} <- channel"
+                                        (get-in tesla-data ["charge_state" "timestamp"])
+                                        (count tesla-data)))
             (cond
               (did-tesla-start-charging? tesla-data (:tesla-data last-regulation))
-              (do
-                ; set Tesla charge limit
-                (tesla/set-charge-rate 0)
+              (let [starting-rate-amps 0]
+                (tesla/set-charge-limit env/target-percent)
+                (tesla/set-charge-rate starting-rate-amps)
+                (async/>!! log-chan (format "[Regulator] Tesla connected; set charge rate to %sA" starting-rate-amps))
                 (-> result
                     (assoc :regulation (-> regulation
-                                           (assoc :new-charge-rate-amps  0)
+                                           (assoc :new-charge-rate-amps starting-rate-amps)
                                            (assoc :new-charge-limit-percent 0)))
-                    (assoc :message "Set charge amps to 0")
                     (assoc :started-regulating true)))
 
               (did-tesla-stop-charging? tesla-data (:tesla-data last-regulation))
               (do
                 (tesla/set-charge-rate (tesla/get-charge-rate (:tesla-data first-regulation)))
-                ; set Tesla charge limit
+                (tesla/set-charge-limit (tesla/get-charge-limit (:tesla-data first-regulation)))
+                (async/>!! log-chan "[Regulator] Reset charge amps to before")
                 (-> result
                     (assoc :regulation (-> regulation
-                                           (assoc :new-charge-rate-amps  0)
-                                           (assoc :new-charge-limit-percent 0)))
-                    (assoc :message "Reset charge amps to before")))
+                                           (assoc :new-charge-rate-amps 0)
+                                           (assoc :new-charge-limit-percent 0)))))
 
               (not (tesla/is-near-charger? tesla-data))
-              (-> result
-                  (assoc :message "Tesla is not near charger"))
+              (do
+                (async/>!! log-chan "[Regulator] Tesla is not near charger")
+                result)
 
               (not (tesla/is-charging? tesla-data))
-              (-> result
-                  (assoc :message "Tesla is not charging"))
+              (do
+                (async/>!! log-chan "[Regulator] Tesla is not charging")
+                result)
 
               (tesla/is-override-active? tesla-data)
-              (do
-                (tesla/set-charge-rate (tesla/get-max-charge-rate tesla-data))
+              (let [max-rate-amps (tesla/get-max-charge-rate tesla-data)]
+                (tesla/set-charge-rate max-rate-amps)
+                (async/>!! log-chan (format "[Regulator] User override active; set charge rate to max (%sA)" max-rate-amps))
                 (-> result
                     (assoc :regulation (-> regulation
-                                           (assoc :new-charge-rate-amps  0)))
-                    (assoc :message "User override active")))
+                                           (assoc :new-charge-rate-amps 0)))))
 
               (<= (get-time-left-minutes) (tesla/get-minutes-to-full-charge-at-max-rate tesla-data))
-              (do
-                (tesla/set-charge-rate (tesla/get-max-charge-rate tesla-data))
+              (let [max-rate-amps (tesla/get-max-charge-rate tesla-data)]
+                (tesla/set-charge-rate max-rate-amps)
+                (async/>!! log-chan (format "[Regulator] Auto override active; set charge rate to max (%sA)" max-rate-amps))
                 (-> result
                     (assoc :regulation (-> regulation
-                                           (assoc :new-charge-rate-amps  0)))
-                    (assoc :message "Auto override active")))
+                                           (assoc :new-charge-rate-amps 0)))))
 
               (has-regulated-this-solar-data? solar-data last-regulation)
-              (-> result
-                  (assoc :message "Already processed this solar data"))
+              (do
+                (async/>!! log-chan "[Regulator] Already processed this solar data")
+                result)
 
               (nil? solar-data)
-              (-> result
-                  (assoc :message "No solar data"))
+              (do
+                (async/>!! log-chan "[Regulator] No solar data")
+                result)
 
-              (nil? (get-excess-power solar-data))
-              (-> result
-                  (assoc :message "No excess power"))
+              (nil? (:power-to-grid-watts (last solar-data)))
+              (do
+                (async/>!! log-chan "[Regulator] No excess power")
+                result)
 
               :else
-              (let [excess-power (get-excess-power solar-data)
+              (let [excess-power (:power-to-grid-watts (last solar-data))
                     available-power-watts (- excess-power env/power-buffer-watts)
                     current-rate-amps (tesla/get-charge-rate tesla-data)
                     max-rate-amps (tesla/get-max-charge-rate tesla-data)
@@ -347,11 +358,11 @@
                                       Math/round
                                       int
                                       (limit 0 max-rate-amps))]
+                (async/>!! log-chan (format "[Regulator] Set charge rate to %sA" new-rate-amps))
                 (-> result
                     (assoc :regulation (-> regulation
                                            (assoc :new-charge-rate-amps new-rate-amps)
-                                           (assoc :used-solar-data true)))
-                    (assoc :message "Done")))))))
+                                           (assoc :used-solar-data true)))))))))
 
       (catch clojure.lang.ExceptionInfo e
         (case (:type (ex-data e))
@@ -361,14 +372,20 @@
         (throw e)))))
 
 (defn regulate-tesla-charge-loop
-  [tesla->regulator solar->regulator error-chan]
+  [tesla->regulator solar->regulator log-chan error-chan]
   (try
     (loop [last-result nil
            last-regulation nil
            first-regulation nil
            solar-data nil]
-      (log :verbose "[Regulator] Regulating tesla data")
-      (let [result (regulate-tesla-charge tesla->regulator solar->regulator last-regulation last-regulation solar-data)
+      (async/>!! log-chan "[Regulator] Working...")
+      (let [result (regulate-tesla-charge
+                    tesla->regulator
+                    solar->regulator
+                    log-chan
+                    last-regulation
+                    last-regulation
+                    solar-data)
             last-regulation (if (not (nil? (:regulation result)))
                               (:regulation result)
                               last-regulation)
@@ -379,12 +396,12 @@
                          (:solar-data result)
                          solar-data)]
 
-        (when (not (nil? (:message result)))
-          (log :info (format "[Regulator] %s" (:message result))))
-
-        (when (not (nil? (:delay result)))
-          (log :info (format "[Regulator] Waiting for %ss%n" (int (/ (:delay result) 1000))))
-          (Thread/sleep (:delay result)))
+        (when-some [delay-until (:delay-until result)]
+          (when (.isAfter delay-until (time-now))
+            (async/>!! log-chan (format "[Regulator] Next run in %ss (%s)"
+                                        (seconds-between-times (time-now) delay-until)
+                                        delay-until))
+            (Thread/sleep (millis-between-times (time-now) delay-until))))
 
         (recur result last-regulation first-regulation solar-data)))
     (catch clojure.lang.ExceptionInfo e
@@ -412,54 +429,28 @@
                   (str "Failed to get Tesla state; " error)
                   {:type :network-error})))))))
 
-#_(defn publish-thingspeak-data
-    [state]
-    (log "Publishing data to thingspeak")
-    (let [power-to-grid (get-in (last (:solar-data state)) ["1152381_7_2_3" "p8018"] 0)
-          charge-rate-amps (get-in (:tesla-state state) ["charge_state" "charge_amps"] 0)
-          battery-percent (get-in (:tesla-state state) ["charge_state" "battery_level"] 0)
-          power-to-tesla (* charge-rate-amps tesla/power-to-current-3-phase)]
-      (try
-        (log-to-thingspeak
-         "field1" (float power-to-grid)
-         "field2" (float charge-rate-amps)
-         "field3" (float battery-percent)
-         "field4" (float power-to-tesla))
-        [state
-         [(do-after 30 publish-thingspeak-data)]]
-        (catch clojure.lang.ExceptionInfo e
-          (case (:type (ex-data e))
-            :err-could-not-get-tesla-state
-            (do
-              (log (ex-message e))
-              [state
-               [(do-after 30 publish-thingspeak-data)]])
-            :network-error
-            (do
-              (log (ex-message e))
-              [state
-               [(do-after 30 publish-thingspeak-data)]])
-
-            (throw e))))))
-
-(defn log-data
-  [tesla->logger solar->logger tesla-data solar-data]
+(defn publish-data
+  [tesla->logger solar->logger log-chan tesla-data solar-data]
   (let [result nil]
     (try
-      (let [[value channel] (async/alts!! [tesla->logger solar->logger (async/timeout 100)])]
+      (let [[value channel] (async/alts!! [tesla->logger
+                                           solar->logger
+                                           (async/timeout 100)])]
         (cond
           (= tesla->logger channel)
-          (-> result
-              (assoc :message (format "Received Tesla data: {t=%s, %s keys} <- channel" (get-in value ["charge_state" "timestamp"]) (count value)))
-              (assoc :tesla-data value))
+          (do
+            (async/>!! log-chan (format "[Logger] Received Tesla data: {t=%s, %s keys} <- channel" (get-in value ["charge_state" "timestamp"]) (count value)))
+            (-> result
+                (assoc :tesla-data value)))
 
           (= solar->logger channel)
-          (-> result
-              (assoc :message (format "Received solar data: %s <- channel" value))
-              (assoc :solar-data value))
+          (do
+            (async/>!! log-chan (format "[Logger] Received solar data: {t=%s, %s keys} <- channel" (:timestamp (last value)) (count (last value))))
+            (-> result
+                (assoc :solar-data value)))
 
           :else
-          (let [power-to-grid (get-in (last solar-data) ["1152381_7_2_3" "p8018"] 0)
+          (let [power-to-grid (get-in (last solar-data) [:power-to-grid-watts] 0)
                 charge-rate-amps (get-in tesla-data ["charge_state" "charge_amps"] 0)
                 battery-percent (get-in tesla-data ["charge_state" "battery_level"] 0)
                 power-to-tesla (* charge-rate-amps tesla/power-to-current-3-phase)]
@@ -468,13 +459,13 @@
              "field2" (float charge-rate-amps)
              "field3" (float battery-percent)
              "field4" (float power-to-tesla))
-            (-> result
-                (assoc :delay 30000)
-                (assoc :message (format "Logged to ThingSpeak: field1=%s field2=%s field3=%s field4=%s"
+            (async/>!! log-chan (format "[Logger] Sent to ThingSpeak: field1=%s field2=%s field3=%s field4=%s"
                                         (float power-to-grid)
                                         (float charge-rate-amps)
                                         (float battery-percent)
-                                        (float power-to-tesla)))))))
+                                        (float power-to-tesla)))
+            (-> result
+                (assoc :delay-until (time-after-seconds 30))))))
 
       (catch clojure.lang.ExceptionInfo e
         (case (:type (ex-data e))
@@ -483,14 +474,14 @@
       (catch Exception e
         (throw e)))))
 
-(defn log-data-loop
-  [tesla->logger solar->logger error-chan]
+(defn publish-data-loop
+  [tesla->logger solar->logger log-chan error-chan]
   (try
     (loop [last-result nil
            last-tesla-data nil
            last-solar-data nil]
-      (log :verbose "[Logger] Logging tesla data")
-      (let [result (log-data tesla->logger solar->logger last-tesla-data last-solar-data)
+      (async/>!! log-chan "[Logger] Working...")
+      (let [result (publish-data tesla->logger solar->logger log-chan last-tesla-data last-solar-data)
             tesla-data (if (not (nil? (:tesla-data result)))
                          (:tesla-data result)
                          last-tesla-data)
@@ -498,14 +489,28 @@
                          (:solar-data result)
                          last-solar-data)]
 
-        (when (not (nil? (:message result)))
-          (log :info (format "[Logger] %s" (:message result))))
-
-        (when (not (nil? (:delay result)))
-          (log :info (format "[Logger] Waiting for %ss%n" (int (/ (:delay result) 1000))))
-          (Thread/sleep (:delay result)))
+        (when-some [delay-until (:delay-until result)]
+          (when (.isAfter delay-until (time-now))
+            (async/>!! log-chan (format "[Logger] Next run in %ss (%s)"
+                                        (seconds-between-times (time-now) delay-until)
+                                        delay-until))
+            (Thread/sleep (millis-between-times (time-now) delay-until))))
 
         (recur result tesla-data solar-data)))
+    (catch clojure.lang.ExceptionInfo e
+      (async/>!! error-chan e))
+    (catch Exception e
+      (async/>!! error-chan e))))
+
+(defn log-loop
+  [log-chan error-chan]
+  (try
+    (loop []
+      (let [message (async/<!! log-chan)]
+        (when (nil? message)
+          (throw (ex-info "Channel closed!" {})))
+        (log :info message)
+        (recur)))
     (catch clojure.lang.ExceptionInfo e
       (async/>!! error-chan e))
     (catch Exception e
@@ -517,33 +522,42 @@
         tesla->regulator (async/chan (async/sliding-buffer 1))
         tesla->logger (async/chan (async/sliding-buffer 1))
         solar->regulator (async/chan (async/sliding-buffer 1))
-        solar->logger (async/chan (async/sliding-buffer 1))]
+        solar->logger (async/chan (async/sliding-buffer 1))
+        log-chan (async/chan 10)]
 
-    (async/thread
+    (async/go
       (update-tesla-data-loop
        tesla->regulator
        tesla->logger
+       log-chan
        error-chan))
 
-    (async/thread
+    (async/go
       (update-solar-data-loop
        solar->regulator
        solar->logger
+       log-chan
        error-chan))
 
-    (async/thread
+    (async/go
       (regulate-tesla-charge-loop
        tesla->regulator
        solar->regulator
+       log-chan
        error-chan))
 
-    (async/thread
-      (log-data-loop
+    (async/go
+      (publish-data-loop
        tesla->logger
        solar->logger
+       log-chan
        error-chan))
 
-    #_(Thread/sleep 10000)
+    (async/go
+      (log-loop
+       log-chan
+       error-chan))
+
     (let [e (async/<!! error-chan)]
       (when (not (nil? e))
         (printf "Critical error; %s%n" (ex-message e))
@@ -554,22 +568,3 @@
     (async/close! tesla->logger)
     (async/close! solar->regulator)
     (async/close! solar->logger)))
-
-#_(defn -main
-    [& args]
-    (log "Starting...")
-
-    (loop [state {} actions (into (priority-map) initial-actions)]
-      (let [[new-state new-actions]
-            (try
-              (main-loop state actions)
-              (catch Exception e
-                (do
-                  (log (.getMessage e))
-                  (throw e)))
-              (catch clojure.lang.ExceptionInfo e
-                (do
-                  (log (ex-message e))
-                  (throw e))))]
-        (recur new-state new-actions))))
-

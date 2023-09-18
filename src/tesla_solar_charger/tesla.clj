@@ -42,8 +42,6 @@
    (get-data env/tesla-vin env/tessie-token)))
 
 (defn set-charge-rate
-  "Sends a request to Tessie to set the charge speed of a Tesla vehicle.
-  Overloaded to use environment variables."
   ([tesla-vin tessie-token charge-speed-amps]
    (try
      (let [response (client/get
@@ -66,6 +64,29 @@
   ([charge-speed-amps]
    (set-charge-rate env/tesla-vin env/tessie-token charge-speed-amps)))
 
+(defn set-charge-limit
+  ([tesla-vin tessie-token charge-limit-percent]
+   (try
+     (let [response (client/get
+                     (str "https://api.tessie.com/" tesla-vin "/command/set_charge_limit")
+                     {:oauth-token tessie-token
+                      :query-params {:retry-duration "40"
+                                     :wait-for-completion "true"
+                                     :percent (str charge-limit-percent)}
+                      :accept :json})
+           json (json/parse-string (:body response))]
+       json)
+     (catch clojure.lang.ExceptionInfo e
+       (let [error (-> (ex-data e)
+                       (:body)
+                       (json/parse-string)
+                       (get "error"))]
+         (throw (ex-info
+                 (str "Failed to set Tesla charge limit; " error)
+                 {:type :err-could-not-set-charge-limit}))))))
+  ([charge-limit-percent]
+   (set-charge-limit env/tesla-vin env/tessie-token charge-limit-percent)))
+
 (defn get-minutes-to-full-charge
   [tesla-state]
   (get-in tesla-state ["charge_state" "minutes_to_full_charge"]))
@@ -77,6 +98,10 @@
 (defn get-charge-rate
   [tesla-state]
   (get-in tesla-state ["charge_state" "charge_amps"]))
+
+(defn get-charge-limit
+  [tesla-state]
+  (get-in tesla-state ["charge_state" "charge_limit_soc"]))
 
 (defn get-tesla-charge-state
   [tesla-state]
@@ -145,20 +170,3 @@
    (is-near-charger? tesla-state
                      env/charger-latitude
                      env/charger-longitude)))
-
-(defn create-status-message
-  [tesla-state]
-  (let [charge-amps (get-charge-rate tesla-state)
-        battery-level-percent (get-battery-level-percent tesla-state)
-        minutes-to-full-charge (get-minutes-to-full-charge tesla-state)
-        hours-to-full-charge (int (/ minutes-to-full-charge 60))]
-    (format "Tesla charge speed: %dA
-Tesla power draw: %.2fW
-Battery level: %d%%
-Time to full charge: %dh %dm
-Vehicle VIN: %s"
-            (int charge-amps)
-            (float (* charge-amps power-to-current-3-phase))
-            (int battery-level-percent)
-            (int hours-to-full-charge) (int (mod minutes-to-full-charge 60))
-            env/tesla-vin)))

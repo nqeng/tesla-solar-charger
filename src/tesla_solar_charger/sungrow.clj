@@ -30,7 +30,7 @@
         seconds (.getSecond datetime)
         [minutes seconds] (if (> seconds 0) [(+ 1 minutes) 0] [minutes seconds])
         minutes (* interval-minutes (Math/ceil (/ minutes interval-minutes)))
-        [hours minutes] (if (> minutes 60) [(+ 1 hours) 0] [hours minutes])]
+        [hours minutes] (if (>= minutes 60) [(+ 1 hours) 0] [hours minutes])]
     (-> datetime
         (.withHour hours)
         (.withMinute minutes)
@@ -50,12 +50,6 @@
    (-> (java.time.LocalDateTime/now)
        (round-down-to-minute-interval data-interval-minutes)
        (create-data-point-timestamp))))
-
-(defn get-next-data-timestamp
-  [datetime]
-  (-> datetime
-      (round-up-to-minute-interval data-interval-minutes)
-      (create-data-point-timestamp)))
 
 (defn get-next-data-publish-time
   [datetime]
@@ -164,19 +158,6 @@
               (str "Sungrow data request failed; " error)
               {:type :err-could-not-get-sungrow-data})))))
 
-(comment (require '[clj-http.client :as client]))
-
-(comment (login "reuben@nqeng.com.au" "absdq142"))
-
-(comment (get-last-data-timestamp (java.time.LocalDateTime/now)))
-
-(comment (get-data
-          (login "reuben@nqeng.com.au" "absdq142")
-          (.minusMinutes (java.time.LocalDateTime/now) 30)
-          (java.time.LocalDateTime/now)
-          ["1152381_7_2_3" "p8018"]
-          ["1152381_7_2_3" "p8000"]))
-
 (defn get-power-to-grid
   ([token time grid-sensor-device meter-active-power]
    (let [json-data (get-data
@@ -196,11 +177,4 @@
     time
     env/grid-sensor-device-id
     env/grid-power-data-id)))
-
-(comment
-  (get-power-to-grid
-   (login "reuben@nqeng.com.au" "absdq142")
-   (.minusMinutes (java.time.LocalDateTime/now) 30)
-   "1152381_7_2_3"
-   "p8018"))
 
