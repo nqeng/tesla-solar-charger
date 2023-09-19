@@ -170,3 +170,11 @@
    (is-near-charger? tesla-state
                      env/charger-latitude
                      env/charger-longitude)))
+
+(defn is-near-location?
+  [tesla-state latitude longitude]
+  (< (euclidean-distance
+      latitude
+      longitude
+      (get-tesla-latitude tesla-state)
+      (get-tesla-longitude tesla-state)) 0.0005))
