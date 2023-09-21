@@ -12,11 +12,11 @@
 
   (will-reach-target-by? [car target-time] true)
 
-  (get-charge-rate-amps [state] (get-in object ["charge_state" "charging_state"]))
+  (get-charge-rate-amps [state] (get-in object ["charge_state" "charge_amps"]))
 
   (get-charge-limit-percent [state] (get-in object ["charge_state" "charge_limit_soc"]))
 
-  (get-max-charge-rate-amps [state] (get-in object ["charge_state" "charge_limit_soc"]))
+  (get-max-charge-rate-amps [state] (get-in object ["charge_state" "charge_current_request_max"]))
 
   (get-latitude [state] (get-in object ["drive_state" "latitude"]))
 
@@ -49,15 +49,15 @@
     "charge_current_request_max" 16,
     "charge_limit_soc_max" 100}})
 
-(defrecord DummyTesla [vin current-state initial-state]
+(defrecord DummyTesla [vin]
   car/Car
 
   (get-state [car]
     (let [new-state (try
-                      (DummyTeslaState. (json/parse-string (slurp "test.json")))
+                      (DummyTeslaState. (json/parse-string (slurp (str (car/get-vin car) ".json"))))
                       (catch Exception e
                         (do
-                          (try (spit "test.json" (json/generate-string default-state {:pretty true}))
+                          (try (spit (str (car/get-vin car) ".json") (json/generate-string default-state {:pretty true}))
                                (catch Exception e
                                  nil))
 
@@ -68,15 +68,32 @@
   (get-vin [car] vin)
 
   (set-charge-rate [car new-charge-rate-amps]
-    (let [new-state (-> current-state
-                        (assoc-in ["charge_state" "charge_amps"] new-charge-rate-amps))]
-      (spit "test.json" (json/generate-string new-state {:pretty true}))
-      (assoc car :current-state new-state)))
+    (let [new-state
+          (try
+            (-> (DummyTeslaState. (json/parse-string (slurp (str (car/get-vin car) ".json")))))
+            (catch Exception e
+              default-state))
+          new-state (assoc-in new-state [:object "charge_state" "charge_amps"] new-charge-rate-amps)]
+
+      (spit (str (car/get-vin car) ".json") (json/generate-string (:object new-state) {:pretty true}))))
+
+  (set-charge-limit [car new-charge-limit-percent]
+    (let [new-state
+          (try
+            (-> (DummyTeslaState. (json/parse-string (slurp (str (car/get-vin car) ".json")))))
+            (catch Exception e
+              default-state))
+          new-state (assoc-in new-state [:object "charge_state" "charge_limit_soc"] new-charge-limit-percent)]
+
+      (spit (str (car/get-vin car) ".json") (json/generate-string (:object new-state) {:pretty true})))
+    )
 
   (restore-state [car state]
     (let [charge-rate-amps (car/get-charge-rate-amps state)
           charge-limit-percent (car/get-charge-limit-percent state)]
       (car/set-charge-rate car charge-rate-amps)
       (car/set-charge-limit car charge-limit-percent))))
+
+(car/get-longitude (car/get-state (DummyTesla. nil nil nil)))
 
 

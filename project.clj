@@ -10,6 +10,7 @@
                  [lynxeyes/dotenv "1.1.0"]
                  [org.clojure/data.priority-map "1.1.0"]
                  [org.clojure/core.async "1.6.681"]
+                 [better-cond "2.1.5"]
                  ]
   :main ^:skip-aot tesla-solar-charger.core
   :target-path "target/%s"
