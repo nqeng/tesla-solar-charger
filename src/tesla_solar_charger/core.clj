@@ -327,7 +327,7 @@
                 (async/>!! log-chan "[Regulator] Car is not charging")
                 result)
 
-              (car/is-charge-overridden? car-state)
+              (car/is-override-active? car-state)
               (let [max-rate-amps (car/get-max-charge-rate-amps car-state)]
                 (car/set-charge-rate car-state max-rate-amps)
                 (async/>!! log-chan (format "[Regulator] User override active; set charge rate to max (%sA)" max-rate-amps))
@@ -617,11 +617,22 @@
                                     adjustment-rate-amps
                                     current-rate-amps)))))))
 
+(defn apply-regulation
+  [log-chan car regulation]
+  (when (some? (:message regulation))
+    (async/>!! log-chan (:message regulation)))
+  (when (some? (:charge-rate-amps regulation))
+    (car/set-charge-rate car (:charge-rate-amps regulation)))
+  (when (some? (:charge-limit-percent regulation))
+    (car/set-charge-rate car (:charge-limit-percent regulation)))
+  (async/>!! log-chan "[Main] Regulation applied"))
+
 (defn run-program
   [log-chan tesla->state->logger solar->data->logger car solar-sites last-regulation]
   (try
+    (async/>!! log-chan "[Main] Working...")
     (let [car-state (car/get-state car)
-          solar-site (first (filter #(is-car-near-site? car %) solar-sites))
+          solar-site (first (filter #(is-car-near-site? car-state %) solar-sites))
           solar-site (if (some? solar-site) (update-data solar-site) nil)]
 
       (when (and (some? car-state)
@@ -632,19 +643,25 @@
                  (false? (async/>!! solar->data->logger solar-site)))
         (throw (ex-info "Channel closed!" {})))
 
+      (async/>!! log-chan "[Main] (car state) -> channel")
+      (async/>!! log-chan "[Main] (solar data) -> channel")
+
       (let [regulation (create-regulation car-state solar-site last-regulation)
-            delay-until (:delay-next-regulation-until regulation)
-            ; update solar site next data time
-            ]
+            delay-until (:delay-next-regulation-until regulation)]
         (try
-          (when (some? (:charge-rate-amps regulation))
-            (car/set-charge-rate car (:charge-rate-amps regulation)))
-          (when (some? (:charge-limit-percent regulation))
-            (car/set-charge-rate car (:charge-limit-percent regulation)))
-          (catch ...))
-        (when (some? (:message regulation))
-          (log :info (:message regulation)))
-        [(run-program log-chan tesla->state->logger solar->data->logger car solar-sites regulation)
+          (apply-regulation log-chan car regulation)
+          (catch clojure.lang.ExceptionInfo e
+            (case (:type (ex-data e))
+              (throw e)))
+          (catch Exception e
+            (throw e)))
+        [(partial run-program
+                  log-chan
+                  tesla->state->logger
+                  solar->data->logger
+                  car
+                  solar-sites
+                  regulation)
          delay-until]))
 
     (catch clojure.lang.ExceptionInfo e
@@ -655,7 +672,7 @@
 (defn main-loop
   [error-chan log-chan tesla->state->logger solar->data->logger car solar-sites]
   (try
-    (loop [action (partial run-program log-chan tesla->state->logger solar->data->logger car solar-sites)]
+    (loop [action (partial run-program log-chan tesla->state->logger solar->data->logger car solar-sites nil)]
       (let [[next-action delay-until] (action)]
         (when (and (some? delay-until)
                    (.isAfter delay-until (time-now)))
@@ -678,6 +695,15 @@
         solar->data->regulator (async/chan (async/sliding-buffer 1))
         solar->data->logger (async/chan (async/sliding-buffer 1))
         log-chan (async/chan 10)]
+
+    (async/go
+      (main-loop
+       error-chan
+       log-chan
+       tesla->state->logger
+       solar->data->logger
+       car
+       charge-sites))
 
     #_(async/go
         (publish-data-loop

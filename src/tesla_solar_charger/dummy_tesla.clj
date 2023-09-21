@@ -3,6 +3,25 @@
    [tesla-solar-charger.car :as car]
    [cheshire.core :as json]))
 
+(defrecord DummyTeslaState [object]
+
+  car/CarState
+  (is-charging? [state] (= "Charging" (get-in object ["charge_state" "charging_state"])))
+
+  (is-override-active? [state] false)
+
+  (will-reach-target-by? [car target-time] true)
+
+  (get-charge-rate-amps [state] (get-in object ["charge_state" "charging_state"]))
+
+  (get-charge-limit-percent [state] (get-in object ["charge_state" "charge_limit_soc"]))
+
+  (get-max-charge-rate-amps [state] (get-in object ["charge_state" "charge_limit_soc"]))
+
+  (get-latitude [state] (get-in object ["drive_state" "latitude"]))
+
+  (get-longitude [state] (get-in object ["drive_state" "longitude"])))
+
 (def default-state
   {"drive_state"
    {"longitude" 146.80377415971097, "latitude" -19.276013838847156},
@@ -33,19 +52,18 @@
 (defrecord DummyTesla [vin current-state initial-state]
   car/Car
 
-  (update-state [car]
+  (get-state [car]
     (let [new-state (try
-                      (json/parse-string (slurp "test.json"))
+                      (DummyTeslaState. (json/parse-string (slurp "test.json")))
                       (catch Exception e
                         (do
                           (try (spit "test.json" (json/generate-string default-state {:pretty true}))
                                (catch Exception e
                                  nil))
 
-                          default-state)))]
+                          (DummyTeslaState. default-state))))]
 
-      (-> car
-          (assoc :current-state new-state))))
+      new-state))
 
   (get-vin [car] vin)
 
@@ -61,20 +79,4 @@
       (car/set-charge-rate car charge-rate-amps)
       (car/set-charge-limit car charge-limit-percent))))
 
-(defrecord DummyTeslaState [object]
 
-  (is-charging? [state] (= "Charging" (get-in object ["charge_state" "charging_state"])))
-
-  (is-override-active? [state] false)
-
-  (will-reach-target-by? [car target-time] true)
-
-  (get-charge-rate-amps [state] (get-in object ["charge_state" "charging_state"]))
-
-  (get-charge-limit-percent [state] (get-in object ["charge_state" "charge_limit_soc"]))
-
-  (get-max-charge-rate-amps [state] (get-in object ["charge_state" "charge_limit_soc"]))
-
-  (get-latitude [state] (get-in object ["drive_state" "latitude"]))
-
-  (get-longitude [state] (get-in object ["drive_state" "longitude"])))
