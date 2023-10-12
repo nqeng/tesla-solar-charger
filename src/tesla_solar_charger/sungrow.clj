@@ -3,7 +3,7 @@
    [clojure.string :as str]
    [clj-http.client :as client]
    [cheshire.core :as json]
-   [tesla-solar-charger.env :as env]))
+   [tesla-solar-charger.time-utils :as time-utils]))
 
 (def api-key "93D72E60331ABDCDC7B39ADC2D1F32B3")
 (def data-interval-minutes 5)  ; Time interval between data points
@@ -15,41 +15,36 @@
    datetime
    (java.time.format.DateTimeFormatter/ofPattern "yyyyMMddHHmmss")))
 
-(defn round-down-to-minute-interval
-  [datetime interval-minutes]
-  (let [minutes (.getMinute datetime)
-        new-minutes (* interval-minutes (Math/floor (/ minutes interval-minutes)))]
-    (-> datetime
-        (.withMinute new-minutes)
-        (.withSecond 0))))
-
 (defn round-up-to-minute-interval
   [datetime interval-minutes]
-  (let [hours (.getHour datetime)
-        minutes (.getMinute datetime)
-        seconds (.getSecond datetime)
-        [minutes seconds] (if (> seconds 0) [(+ 1 minutes) 0] [minutes seconds])
-        minutes (* interval-minutes (Math/ceil (/ minutes interval-minutes)))
-        [hours minutes] (if (>= minutes 60) [(+ 1 hours) 0] [hours minutes])]
-    (-> datetime
-        (.withHour hours)
-        (.withMinute minutes)
-        (.withSecond seconds)
-        (.withNano 0))))
+  (let [zone-offset (.getOffset (.getRules (java.time.ZoneId/systemDefault)) datetime)
+        interval-seconds (* interval-minutes 60)
+        seconds (.toEpochSecond datetime zone-offset)
+        mod-seconds (mod seconds interval-seconds)
+        new-seconds (+ seconds (- interval-seconds mod-seconds))
+        new-time (java.time.LocalDateTime/ofEpochSecond new-seconds 0 zone-offset)]
+    new-time))
+
+(defn round-down-to-minute-interval
+  [datetime interval-minutes]
+  (let [zone-offset (.getOffset (.getRules (java.time.ZoneId/systemDefault)) datetime)
+        interval-seconds (* interval-minutes 60)
+        seconds (.toEpochSecond datetime zone-offset)
+        mod-seconds (mod seconds interval-seconds)
+        new-seconds (- seconds mod-seconds)
+        new-time (java.time.LocalDateTime/ofEpochSecond new-seconds 0 zone-offset)]
+    new-time))
 
 (defn get-latest-data-publish-time
-  []
-  (round-down-to-minute-interval (java.time.LocalDateTime/now) data-interval-minutes))
+  [datetime]
+  (-> datetime
+      (round-down-to-minute-interval data-interval-minutes)))
 
-(defn get-last-data-timestamp
+(defn get-latest-data-timestamp
   ([datetime]
    (-> datetime
-       (round-down-to-minute-interval data-interval-minutes)
-       (create-data-point-timestamp)))
-  ([]
-   (-> (java.time.LocalDateTime/now)
-       (round-down-to-minute-interval data-interval-minutes)
-       (create-data-point-timestamp))))
+       get-latest-data-publish-time
+       create-data-point-timestamp)))
 
 (defn get-next-data-publish-time
   [datetime]
@@ -57,8 +52,6 @@
       (round-up-to-minute-interval data-interval-minutes)))
 
 (defn login
-  "Sends a login request to Sungrow API, returning an auth token.
-  Overloaded to use environment variables."
   ([username password]
    (let [response
          (client/post
@@ -101,13 +94,10 @@
        :else
        (throw (ex-info
                (str "Sungrow login failed; " error)
-               {:type :err-sungrow-login-other})))))
-
-  ([]
-   (login env/sungrow-username env/sungrow-password)))
+               {:type :err-sungrow-login-other}))))))
 
 (defn get-data
-  [token start-time end-time & data-points]
+  [token start-time end-time data-interval-minutes & data-points]
   (let [ps-keys (map first data-points)
         points (map second data-points)
         response
@@ -118,8 +108,8 @@
                           :sys_code "200"
                           :token token
                           :user_id ""
-                          :start_time_stamp (get-last-data-timestamp start-time)
-                          :end_time_stamp (get-last-data-timestamp end-time)
+                          :start_time_stamp (get-latest-data-timestamp start-time)
+                          :end_time_stamp (get-latest-data-timestamp end-time)
                           :minute_interval data-interval-minutes
                           :ps_key (str/join "," ps-keys)
                           :points (str/join "," points)}
@@ -167,14 +157,8 @@
                     [grid-sensor-device meter-active-power])
          power-value-str (get-in json-data [grid-sensor-device
                                             meter-active-power
-                                            (get-last-data-timestamp time)] "--")]
+                                            (get-latest-data-timestamp time)] "--")]
      (if (= "--" power-value-str)
        nil
-       (- (Float/parseFloat power-value-str)))))
-  ([token time]
-   (get-power-to-grid
-    token
-    time
-    env/grid-sensor-device-id
-    env/grid-power-data-id)))
+       (- (Float/parseFloat power-value-str))))))
 

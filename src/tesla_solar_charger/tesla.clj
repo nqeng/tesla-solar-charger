@@ -1,6 +1,5 @@
 (ns tesla-solar-charger.tesla
   (:require
-   [tesla-solar-charger.env :as env]
    [clj-http.client :as client]
    [cheshire.core :as json]))
 
@@ -37,9 +36,7 @@
                        (str "Failed to get Tesla state; " error)
                        {:type :err-could-not-get-tesla-state})))))
          json (json/parse-string (:body response))]
-     json))
-  ([]
-   (get-data env/tesla-vin env/tessie-token)))
+     json)))
 
 (defn set-charge-rate
   ([tesla-vin tessie-token charge-speed-amps]
@@ -60,9 +57,7 @@
                        (get "error"))]
          (throw (ex-info
                  (str "Failed to set Tesla charge amps; " error)
-                 {:type :err-could-not-set-charge-amps}))))))
-  ([charge-speed-amps]
-   (set-charge-rate env/tesla-vin env/tessie-token charge-speed-amps)))
+                 {:type :err-could-not-set-charge-amps})))))))
 
 (defn set-charge-limit
   ([tesla-vin tessie-token charge-limit-percent]
@@ -83,9 +78,7 @@
                        (get "error"))]
          (throw (ex-info
                  (str "Failed to set Tesla charge limit; " error)
-                 {:type :err-could-not-set-charge-limit}))))))
-  ([charge-limit-percent]
-   (set-charge-limit env/tesla-vin env/tessie-token charge-limit-percent)))
+                 {:type :err-could-not-set-charge-limit})))))))
 
 (defn get-minutes-to-full-charge
   [tesla-state]
@@ -165,8 +158,12 @@
                            charger-longitude
                            tesla-latitude
                            tesla-longitude)]
-     (< distance-between 0.0005)))
-  ([tesla-state]
-   (is-near-charger? tesla-state
-                     env/charger-latitude
-                     env/charger-longitude)))
+     (< distance-between 0.0005))))
+
+(defn is-near-location?
+  [tesla-state latitude longitude]
+  (< (euclidean-distance
+      latitude
+      longitude
+      (get-tesla-latitude tesla-state)
+      (get-tesla-longitude tesla-state)) 0.0005))
