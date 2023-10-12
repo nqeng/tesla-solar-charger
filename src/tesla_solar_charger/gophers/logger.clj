@@ -1,6 +1,5 @@
 (ns tesla-solar-charger.gophers.logger
   (:require
-   [better-cond.core :as b]
    [clojure.core.async :as async]
    [clojure.string :as s]
    [clojure.java.io :refer [make-parents]]
@@ -21,12 +20,10 @@
                  :info #{:error :info}
                  :error #{:error}})
 
-(def log-level :info)
-
 (defn log
-  [level prefix & args]
-  (let [levels (get log-levels log-level)]
-    (when (contains? levels level)
+  [log-level message-level prefix & args]
+  (let [permitted-levels (get log-levels log-level)]
+    (when (contains? permitted-levels message-level)
       (let [time (time-now)
             log-timestamp (format-time "yyyy-MM-dd HH:mm:ss" time)
             prefix (if (some? prefix) prefix "Misc")
@@ -37,32 +34,16 @@
         (make-parents log-file-path)
         (spit log-file-path (str log-message "\n") :append true)))))
 
-(def log-blacklist
-  ["![Solar]" "![Car]" "![Logger]"])
-
-(defn is-blacklisted?
-  [message]
-  (not (not-any? (partial s/starts-with? message) log-blacklist)))
-
 (defn log-loop
-  [log-chan error-chan]
+  [log-level log-chan error-chan]
   (try
     (loop []
-      (b/cond
-        :let [message (async/<!! log-chan)]
-
-        (nil? message)
-        (throw (ex-info "Channel closed!" {}))
-
-        (is-blacklisted? message)
-        nil
-
-        (string? message)
-        (log :info message)
-
-        (map? message)
-        (log (:level message) (:prefix message) (:message message)))
-
+      (let [message (async/<!! log-chan)]
+        (when (nil? message)
+          (throw (ex-info "Channel closed!" {})))
+        (if (string? message)
+          (log log-level :info message)
+          (log log-level (:level message) (:prefix message) (:message message))))
       (recur))
     (catch clojure.lang.ExceptionInfo e
       (async/>!! error-chan e))

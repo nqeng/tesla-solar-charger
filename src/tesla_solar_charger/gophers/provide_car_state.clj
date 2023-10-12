@@ -1,6 +1,5 @@
 (ns tesla-solar-charger.gophers.provide-car-state
   (:require
-   [better-cond.core :refer [cond] :rename {cond better-cond}]
    [tesla-solar-charger.interfaces.car :as car]
    [clojure.core.async :as async]
    [tesla-solar-charger.time-utils :as time-utils]))

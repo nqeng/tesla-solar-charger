@@ -1,6 +1,5 @@
 (ns tesla-solar-charger.gophers.provide-site-data
   (:require
-   [better-cond.core :refer [cond] :rename {cond better-cond}]
    [tesla-solar-charger.interfaces.site :as site]
    [clojure.core.async :as async]
    [tesla-solar-charger.time-utils :as time-utils]))
