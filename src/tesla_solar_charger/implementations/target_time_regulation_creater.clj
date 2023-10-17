@@ -1,6 +1,7 @@
 (ns tesla-solar-charger.implementations.target-time-regulation-creater
   (:require
    [tesla-solar-charger.interfaces.car :as car]
+   [clojure.core.async :as async]
    [tesla-solar-charger.interfaces.site :as site]
    [tesla-solar-charger.interfaces.regulator :as regulator]
    [tesla-solar-charger.time-utils :as time-utils]))
@@ -34,7 +35,7 @@
     (< num min) min
     :else       num))
 
-(defrecord TargetTimeRegulationCreater [power-buffer-watts max-climb-amps max-drop-amps target-percent target-time]
+(defrecord TargetTimeRegulationCreater [settings-chan]
 
   regulator/RegulationCreater
 
@@ -43,7 +44,10 @@
           last-attempted-regulation (regulator/get-last-attempted-regulation regulator)
           last-successful-regulation (regulator/get-last-successful-regulation regulator)
           first-successful-regulation (regulator/get-first-successful-regulation regulator)
-          site (regulator/get-site regulator)]
+          site (regulator/get-site regulator)
+          settings (async/<! settings-chan)]
+      (when (nil? settings)
+        (throw (ex-info "Channel closed" {})))
       (cond
         (and
          (some? last-attempted-regulation)
@@ -56,7 +60,6 @@
         (-> regulation
             (regulator/set-did-car-start-charging true)
             (regulator/set-charge-rate-amps 0)
-            (regulator/set-charge-limit-percent target-percent)
             (regulator/add-message (format "Car started charging")))
 
         (did-car-stop-charging-here? car-state last-attempted-regulation site)
@@ -76,17 +79,36 @@
         (-> regulation
             (regulator/add-message "Car is not charging"))
 
+        (and
+         (some? (:target-percent settings))
+         (not= (car/get-charge-limit-percent car-state) (:target-percent settings)))
+        (-> regulation
+            (regulator/set-charge-limit-percent (:target-percent settings))
+            (regulator/add-message (format "Set charge limit to %s%%" (:target-percent settings))))
+
         (car/is-override-active? car-state)
         (-> regulation
             (regulator/set-charge-rate-amps (car/get-max-charge-rate-amps car-state))
             (regulator/add-message "Override active"))
 
-        (not (car/will-reach-target-by? car-state target-time))
+        (and
+         (some? (:target-hour settings))
+         (some? (:target-minute settings))
+         (some? (:target-second settings))
+         (not (car/will-reach-target-by? car-state (-> (java.time.LocalDateTime/now
+                                                        (.withHour (:target-hour settings))
+                                                        (.withMinute (:target-minute settings))
+                                                        (.withSecond (:target-second settings))
+                                                        (.withNano 0))))))
         (-> regulation
             (regulator/set-charge-rate-amps (car/get-max-charge-rate-amps car-state))
             (regulator/add-message (format "Overriding to reach %s%% by %s"
-                                           target-percent
-                                           (time-utils/format-time "HH:mm" target-time))))
+                                           (car/get-charge-limit-percent car-state)
+                                           (time-utils/format-time "HH:mm:ss" (-> (java.time.LocalDateTime/now
+                                                                                (.withHour (:target-hour settings))
+                                                                                (.withMinute (:target-minute settings))
+                                                                                (.withSecond (:target-second settings))
+                                                                                (.withNano 0)))))))
 
         (nil? site-data)
         (-> regulation
