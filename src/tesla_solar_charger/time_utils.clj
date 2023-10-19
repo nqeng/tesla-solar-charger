@@ -1,10 +1,15 @@
 (ns tesla-solar-charger.time-utils
   (:require
+    [clj-http.client :as client]
    [clojure.core.async :as async])
   (:import
    (java.time.temporal ChronoUnit)
    (java.time LocalDateTime)
    (java.time.format DateTimeFormatter)))
+
+(defn send-to-ntfy
+  [message]
+  (try (client/post "https://ntfy.sh/github-nqeng-tesla-solar-charger" {:body message})))
 
 (defn time-from-epoch-millis
   [millis]
