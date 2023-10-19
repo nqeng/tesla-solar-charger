@@ -45,7 +45,7 @@
           last-successful-regulation (regulator/get-last-successful-regulation regulator)
           first-successful-regulation (regulator/get-first-successful-regulation regulator)
           site (regulator/get-site regulator)
-          settings (async/<! settings-chan)]
+          settings (async/<!! settings-chan)]
       (when (nil? settings)
         (throw (ex-info "Channel closed" {})))
       (cond
@@ -63,12 +63,10 @@
             (regulator/add-message (format "Car started charging")))
 
         (did-car-stop-charging-here? car-state last-attempted-regulation site)
-        (let [charge-rate-amps (car/get-charge-rate-amps (regulator/get-car-state first-successful-regulation))
-              charge-limit-percent (car/get-charge-limit-percent (regulator/get-car-state first-successful-regulation))]
+        (let [charge-rate-amps (car/get-charge-rate-amps (regulator/get-car-state first-successful-regulation))]
           (-> regulation
               (regulator/set-did-car-stop-charging true)
               (regulator/set-charge-rate-amps charge-rate-amps)
-              (regulator/set-charge-limit-percent charge-limit-percent)
               (regulator/add-message (format "Car stopped charging"))))
 
         (not (site/is-car-here? site car-state))
@@ -79,13 +77,6 @@
         (-> regulation
             (regulator/add-message "Car is not charging"))
 
-        (and
-         (some? (:target-percent settings))
-         (not= (car/get-charge-limit-percent car-state) (:target-percent settings)))
-        (-> regulation
-            (regulator/set-charge-limit-percent (:target-percent settings))
-            (regulator/add-message (format "Set charge limit to %s%%" (:target-percent settings))))
-
         (car/is-override-active? car-state)
         (-> regulation
             (regulator/set-charge-rate-amps (car/get-max-charge-rate-amps car-state))
@@ -95,20 +86,20 @@
          (some? (:target-hour settings))
          (some? (:target-minute settings))
          (some? (:target-second settings))
-         (not (car/will-reach-target-by? car-state (-> (java.time.LocalDateTime/now
-                                                        (.withHour (:target-hour settings))
-                                                        (.withMinute (:target-minute settings))
-                                                        (.withSecond (:target-second settings))
-                                                        (.withNano 0))))))
+         (not (car/will-reach-target-by? car-state (:target-percent settings) (-> (java.time.LocalDateTime/now)
+                                                       (.withHour (:target-hour settings))
+                                                       (.withMinute (:target-minute settings))
+                                                       (.withSecond (:target-second settings))
+                                                       (.withNano 0)))))
         (-> regulation
             (regulator/set-charge-rate-amps (car/get-max-charge-rate-amps car-state))
             (regulator/add-message (format "Overriding to reach %s%% by %s"
                                            (car/get-charge-limit-percent car-state)
-                                           (time-utils/format-time "HH:mm:ss" (-> (java.time.LocalDateTime/now
-                                                                                (.withHour (:target-hour settings))
-                                                                                (.withMinute (:target-minute settings))
-                                                                                (.withSecond (:target-second settings))
-                                                                                (.withNano 0)))))))
+                                           (time-utils/format-time "HH:mm:ss" (-> (java.time.LocalDateTime/now)
+                                                                                  (.withHour (:target-hour settings))
+                                                                                  (.withMinute (:target-minute settings))
+                                                                                  (.withSecond (:target-second settings))
+                                                                                  (.withNano 0))))))
 
         (nil? site-data)
         (-> regulation
@@ -126,11 +117,11 @@
 
         :else
         (let [excess-power (site/get-excess-power-watts (last (site/get-points site-data)))
-              available-power-watts (- excess-power power-buffer-watts)
+              available-power-watts (- excess-power 1000)
               current-rate-amps (car/get-charge-rate-amps car-state)
               max-charge-rate-amps (car/get-max-charge-rate-amps car-state)
               adjustment-rate-amps (site/power-watts-to-current-amps site available-power-watts)
-              adjustment-rate-amps (limit adjustment-rate-amps (- max-drop-amps) max-climb-amps)
+              adjustment-rate-amps (limit adjustment-rate-amps (- 8) 8)
               new-charge-rate-amps (-> current-rate-amps
                                        (+ adjustment-rate-amps)
                                        float
