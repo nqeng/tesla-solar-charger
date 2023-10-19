@@ -36,16 +36,17 @@
 
 (defn log-loop
   [log-level log-chan error-chan]
-  (try
-    (loop []
-      (let [message (async/<!! log-chan)]
-        (when (nil? message)
-          (throw (ex-info "Channel closed!" {})))
-        (if (string? message)
-          (log log-level :info message)
-          (log log-level (:level message) (:prefix message) (:message message))))
-      (recur))
-    (catch clojure.lang.ExceptionInfo e
-      (async/>!! error-chan e))
-    (catch Exception e
-      (async/>!! error-chan e))))
+  (async/go
+    (try
+      (loop []
+        (let [message (async/<! log-chan)]
+          (when (nil? message)
+            (throw (ex-info "Channel closed!" {})))
+          (if (string? message)
+            (log log-level :info message)
+            (log log-level (:level message) (:prefix message) (:message message))))
+        (recur))
+      (catch clojure.lang.ExceptionInfo e
+        (async/>! error-chan e))
+      (catch Exception e
+        (async/>! error-chan e)))))
