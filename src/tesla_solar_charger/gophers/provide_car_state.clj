@@ -10,21 +10,24 @@
     (try
       (loop [car car]
         (async/>! log-chan {:level :info :prefix log-prefix :message "Retrieving new state..."})
-        (let [request nil
-              car-state (car/get-state car)]
-          (async/>! log-chan {:level :info :prefix log-prefix :message "Got new state"})
-          (async/>! log-chan {:level :verbose :prefix log-prefix :message car-state})
-          (when (and (some? car-state)
-                     (false? (async/>! output-chan car-state)))
-            (throw (ex-info "Channel closed!" {})))
-          (when-let [next-state-available-time (time-utils/time-after-seconds 10)]
-            (when (.isAfter next-state-available-time (java.time.LocalDateTime/now))
-              (async/>! log-chan {:level :info
-                                  :prefix log-prefix
-                                  :message (format "Sleeping until %s" 
-                                                   (time-utils/format-time "yyyy-MM-dd HH:mm:ss" next-state-available-time))})
-              (Thread/sleep (time-utils/millis-between-times (java.time.LocalDateTime/now) next-state-available-time))))
-          (recur car)))
+        (try
+          (let [car-state (car/get-state car)]
+            (async/>! log-chan {:level :info :prefix log-prefix :message "Got new state"})
+            (async/>! log-chan {:level :verbose :prefix log-prefix :message car-state})
+            (when (and (some? car-state)
+                       (false? (async/>! output-chan car-state)))
+              (throw (ex-info "Channel closed!" {}))))
+          (catch com.fasterxml.jackson.core.JsonParseException e
+            (time-utils/send-to-ntfy "com.fasterxml.jackson.core.JsonParseException; failed to parse car state")))
+
+        (when-let [next-state-available-time (time-utils/time-after-seconds 10)]
+          (when (.isAfter next-state-available-time (java.time.LocalDateTime/now))
+            (async/>! log-chan {:level :info
+                                :prefix log-prefix
+                                :message (format "Sleeping until %s"
+                                                 (time-utils/format-time "yyyy-MM-dd HH:mm:ss" next-state-available-time))})
+            (Thread/sleep (time-utils/millis-between-times (java.time.LocalDateTime/now) next-state-available-time))))
+        (recur car))
       (catch clojure.lang.ExceptionInfo e
         (async/>! error-chan e))
       (catch Exception e
