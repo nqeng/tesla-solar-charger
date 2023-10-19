@@ -15,13 +15,32 @@
 
   (is-override-active? [state] (true? (get-in object ["vehicle_state" "valet_mode"])))
 
-  (will-reach-target-by? [car target-time] true)
-
   (get-charge-rate-amps [state] (get-in object ["charge_state" "charge_amps"]))
 
   (get-charge-limit-percent [state] (get-in object ["charge_state" "charge_limit_soc"]))
 
+  (get-minutes-to-full-charge [state] (get-in object ["charge_state" "minutes_to_full_charge"]))
+
+  (get-minutes-to-target-percent [state target-percent]
+    (let [charge-limit-percent (car/get-charge-limit-percent state)
+          minutes-to-full-charge (car/get-minutes-to-full-charge state)
+          minutes-per-percent (/ minutes-to-full-charge charge-limit-percent)
+          minutes-to-target-percent (* minutes-per-percent target-percent)]
+      minutes-to-target-percent))
+
+  (get-minutes-to-target-percent-at-max-rate [state target-percent]
+    (let [charge-rate-amps (car/get-charge-rate-amps state)
+          max-charge-rate-amps (car/get-max-charge-rate-amps state)
+          minutes-to-target-percent (car/get-minutes-to-target-percent state target-percent)
+          minutes-per-amp (/ minutes-to-target-percent max-charge-rate-amps)
+          minutes-to-target-percent-at-max-rate (* minutes-per-amp charge-rate-amps)]
+      minutes-to-target-percent-at-max-rate))
+
   (get-max-charge-rate-amps [state] (get-in object ["charge_state" "charge_current_request_max"]))
+
+  (will-reach-target-by? [state target-percent target-time]
+    (< (car/get-minutes-to-target-percent state target-percent)
+       (time-utils/calc-minutes-between-times (car/get-time state) target-time)))
 
   (get-latitude [state] (get-in object ["drive_state" "latitude"]))
 
@@ -107,4 +126,31 @@
       (car/set-charge-rate car charge-rate-amps)
       (car/set-charge-limit car charge-limit-percent))))
 
+(comment
+  (let [car (->DummyTesla "1234")
+        car-state (-> (car/get-state car)
+                      (assoc-in [:object "charge_state" "charge_limit_soc"] 80)
+                      (assoc-in [:object "charge_state" "charge_amps"] 8)
+                      (assoc-in [:object "charge_state" "minutes_to_full_charge"] 120))
+        target-time (-> (java.time.LocalDateTime/now)
+                        (.withHour 16)
+                        (.withMinute 30)
+                        (.withSecond 0)
+                        (.withNano 0))
+        target-percent 60]
+    (assert (= 80 (car/get-charge-limit-percent car-state)))
+    (assert (= 8 (car/get-charge-rate-amps car-state)))
+    (assert (= 120 (car/get-minutes-to-full-charge car-state)))
+    (printf "Reaching %s%% by %s at %sA%n"
+            (car/get-charge-limit-percent car-state)
+            (time-utils/format-time "HH:mm:ss" (.plusMinutes (car/get-time car-state) (car/get-minutes-to-full-charge car-state)))
+            (car/get-charge-rate-amps car-state))
+    (printf "Will reach %s%% by %s at %sA%n"
+            target-percent
+            (time-utils/format-time "HH:mm:ss" (.plusMinutes (car/get-time car-state) (car/get-minutes-to-target-percent car-state target-percent)))
+            (car/get-charge-rate-amps car-state))
+    (printf "At max rate, will reach %s%% by %s at %sA%n"
+            target-percent
+            (time-utils/format-time "HH:mm:ss" (.plusMinutes (car/get-time car-state) (car/get-minutes-to-target-percent-at-max-rate car-state target-percent)))
+            (car/get-max-charge-rate-amps car-state))))
 

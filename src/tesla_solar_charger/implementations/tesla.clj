@@ -18,13 +18,23 @@
 
   (is-override-active? [state] (true? (get-in object ["vehicle_state" "valet_mode"])))
 
-  (will-reach-target-by? [car target-time] true)
+  (will-reach-target-by? [car target-percent target-time]
+    (let [minutes-to-full-charge (get-in object ["charge_state" "minutes_to_full_charge"])
+          ]
+      )
+    )
 
   (get-charge-rate-amps [state] (get-in object ["charge_state" "charge_amps"]))
 
   (get-charge-limit-percent [state] (get-in object ["charge_state" "charge_limit_soc"]))
 
   (get-max-charge-rate-amps [state] (get-in object ["charge_state" "charge_current_request_max"]))
+
+  (get-minutes-to-full-charge [state] (get-in object ["charge_state" "minutes_to_full_charge"]))
+
+  (get-minutes-to-target-percent [state target-percent])
+
+  (get-minutes-to-target-percent-at-max-rate [state target-percent])
 
   (get-latitude [state] (get-in object ["drive_state" "latitude"]))
 
