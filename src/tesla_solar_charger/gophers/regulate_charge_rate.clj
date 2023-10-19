@@ -4,12 +4,13 @@
    [clojure.core.async :as async]))
 
 (defn regulate-car-charge-rate
-  [log-prefix regulator current-car-state-chan current-site-data-chan error-chan log-chan]
+  [log-prefix regulator car-state-chan site-data-chan error-chan log-chan]
   (async/go
     (try
       (loop [regulator regulator]
-        (let [car-state (async/<! current-car-state-chan)
-              site-data (async/<! current-site-data-chan)]
+        (async/>! log-chan {:level :info :prefix log-prefix :message "Waiting..."})
+        (let [car-state (async/<! car-state-chan)
+              site-data (async/<! site-data-chan)]
           (when (nil? car-state)
             (throw (ex-info "Channel closed" {})))
           (when (nil? site-data)
