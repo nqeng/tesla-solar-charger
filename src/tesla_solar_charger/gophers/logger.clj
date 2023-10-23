@@ -3,13 +3,13 @@
    [clojure.core.async :as async]
    [clojure.string :as s]
    [clojure.java.io :refer [make-parents]]
-   [tesla-solar-charger.time-utils :refer [time-now format-time]]))
+   [tesla-solar-charger.utils :as utils]))
 
 (defn make-log-file-path
   [time]
-  (let [year-folder (format-time "yy" time)
-        month-folder (format-time "MM" time)
-        log-file (format-time "yy-MM-dd" time)
+  (let [year-folder (utils/format-time "yy" time)
+        month-folder (utils/format-time "MM" time)
+        log-file (utils/format-time "yy-MM-dd" time)
         log-file-path (format "./logs/%s/%s/%s.log"
                               year-folder
                               month-folder
@@ -24,8 +24,8 @@
   [log-level message-level prefix & args]
   (let [permitted-levels (get log-levels log-level)]
     (when (contains? permitted-levels message-level)
-      (let [time (time-now)
-            log-timestamp (format-time "yyyy-MM-dd HH:mm:ss" time)
+      (let [time (utils/time-now)
+            log-timestamp (utils/format-time "yyyy-MM-dd HH:mm:ss" time)
             prefix (if (some? prefix) prefix "Misc")
             log-message (format "[%s] [%s] %s" log-timestamp prefix (s/join "\n" args))
             log-file-path (make-log-file-path time)]
