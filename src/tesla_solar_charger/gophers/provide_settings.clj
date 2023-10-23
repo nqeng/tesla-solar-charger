@@ -1,6 +1,7 @@
 (ns tesla-solar-charger.gophers.provide-settings
   (:require
-   [clojure.core.async :as async]))
+   [clojure.core.async :as async]
+   [cheshire.core :as json]))
 
 (def default-settings
   {:target-time-hour 16
@@ -12,7 +13,11 @@
   [log-prefix settings-filename get-chan set-chan error-chan log-chan]
   (async/go
     (try
-      (loop [settings default-settings]
+      (loop [settings (try
+                        (json/parse-string (slurp settings-filename))
+                        (catch Exception e
+                          default-settings))]
+        (async/>! log-chan {:level :verbose :prefix log-prefix :message "..."})
         (let [[value chan] (async/alts! [[get-chan settings] set-chan])]
           (if (= get-chan chan)
             (let [success value]
@@ -26,6 +31,7 @@
               (let [new-settings (set-request settings)]
                 (async/>! log-chan {:level :info :prefix log-prefix :message "Received change request"})
                 (async/>! log-chan {:level :verbose :prefix log-prefix :message new-settings})
+                (spit settings-filename (json/generate-string new-settings {:pretty true}))
                 (recur new-settings))))))
       (catch clojure.lang.ExceptionInfo e
         (async/>! error-chan e))
