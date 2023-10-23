@@ -3,7 +3,7 @@
    [tesla-solar-charger.interfaces.car :as car]
    [clojure.core.async :as async]
    [tesla-solar-charger.interfaces.site :as site]
-   [tesla-solar-charger.time-utils :as time-utils]))
+   [tesla-solar-charger.utils :as utils]))
 
 (declare Regulator)
 (declare Regulation)
@@ -30,7 +30,7 @@
   (get-messages [regulation])
   (apply-regulation [regulation car log-chan log-prefix]))
 
-(defrecord ChargeRateChargeLimitRegulation [car-state site-data]
+(defrecord ChargeRateRegulation [car-state site-data]
 
   Regulation
 
@@ -63,15 +63,6 @@
         (when (some? (get-charge-rate-amps regulation))
           (car/set-charge-rate car (get-charge-rate-amps regulation))
           (async/>!! log-chan {:level :info :prefix log-prefix :message (format "Set charge rate to %sA" (get-charge-rate-amps regulation))}))
-        (when (some? (get-charge-limit-percent regulation))
-          (car/set-charge-limit car (get-charge-limit-percent regulation))
-          (async/>!! log-chan {:level :info :prefix log-prefix :message (format "Set charge limit to %s%%" (get-charge-limit-percent regulation))}))
-        (when (true? (used-solar-data? regulation))
-          (time-utils/send-to-ntfy (format "Car is at %s%nExcess power = %s%nCharge rate = %s"
-                                           (site/get-name site)
-                                           (site/get-excess-power-watts (last (site/get-points (get-site-data regulation))))
-                                           (get-charge-rate-amps regulation))))
-
         (let [regulator (set-last-successful-regulation regulator regulation)
               regulator (if (did-car-start-charging? regulation)
                           (set-first-successful-regulation regulator regulation)
