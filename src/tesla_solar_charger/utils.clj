@@ -1,4 +1,4 @@
-(ns tesla-solar-charger.time-utils
+(ns tesla-solar-charger.utils
   (:require
     [clj-http.client :as client]
    [clojure.core.async :as async])
