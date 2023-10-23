@@ -4,10 +4,10 @@
    [cheshire.core :as json]))
 
 (def default-settings
-  {:target-time-hour 16
-   :target-time-minute 30
-   :target-time-second 0
-   :target-percent 80})
+  {"target_time_hour" 16
+   "target_time_minute" 30
+   "target_time_second" 0
+   "target_percent" 80})
 
 (defn provide-settings
   [log-prefix settings-filename get-chan set-chan error-chan log-chan]
@@ -17,7 +17,7 @@
                         (json/parse-string (slurp settings-filename))
                         (catch Exception e
                           default-settings))]
-        (async/>! log-chan {:level :verbose :prefix log-prefix :message "..."})
+        (async/>! log-chan {:level :info :prefix log-prefix :message "..."})
         (let [[value chan] (async/alts! [[get-chan settings] set-chan])]
           (if (= get-chan chan)
             (let [success value]

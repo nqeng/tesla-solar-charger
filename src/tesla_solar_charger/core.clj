@@ -2,6 +2,8 @@
   (:gen-class)
   (:require
    [tesla-solar-charger.gophers.get-car-state :refer [get-car-state]]
+   [better-cond.core :refer [cond] :rename {cond better-cond}]
+   [tesla-solar-charger.utils :as utils]
    [tesla-solar-charger.gophers.get-site-data :refer [get-site-data]]
    [tesla-solar-charger.gophers.regulate-charge-rate :refer [regulate-charge-rate]]
    [tesla-solar-charger.gophers.provide-settings :refer [provide-settings]]
@@ -16,39 +18,43 @@
    [tesla-solar-charger.implementations.simple-regulation-creater :as simple-regulation-creater]
    [tesla-solar-charger.implementations.target-time-regulation-creater :as target-time-regulation-creater]
    [tesla-solar-charger.implementations.default-regulator :as default-regulator]
-   [clojure.core.async :as async]))
+   [clojure.core.async :as async]
+   [tesla-solar-charger.interfaces.site :as site]
+   [tesla-solar-charger.interfaces.car :as car]))
 
 (def solar-sites
   [(sungrow-site/->SungrowSite
-     ""
-     0
-     0
-     ""
-     ""
-     ""
+    "site1"
+    ""
+    0
+    0
+    ""
+    ""
+    ""
     5
     {})
    (sungrow-site/->SungrowSite
-     ""
-     0
-     0
-     ""
-     ""
-     ""
-     0
+    "site2"
+    ""
+    0
+    0
+    ""
+    ""
+    ""
+    0
     {})])
 
 (defn -main
   [& args]
   (println "Starting...")
-  (let [car (dummy-tesla/->DummyTesla "1234")
+  (let [car1 (dummy-tesla/->DummyTesla "1234")
         get-settings-chan (async/chan)
         set-settings-chan (async/chan)
-        new-car-state-chan (async/chan (async/sliding-buffer 1))
-        current-car-state-chan (async/chan)
-        new-car-state-chan-split1 (async/chan (async/sliding-buffer 1))
-        new-car-state-chan-split2 (async/chan (async/sliding-buffer 1))
-        new-car-state-chan-split3 (async/chan (async/sliding-buffer 1))
+        new-car1-state-chan (async/chan (async/sliding-buffer 1))
+        current-car1-state-chan (async/chan)
+        new-car1-state-chan-split1 (async/chan (async/sliding-buffer 1))
+        new-car1-state-chan-split2 (async/chan (async/sliding-buffer 1))
+        new-car1-state-chan-split3 (async/chan (async/sliding-buffer 1))
         new-site1-data-chan (async/chan (async/sliding-buffer 1))
         current-site1-data-chan (async/chan)
         new-site2-data-chan (async/chan (async/sliding-buffer 1))
@@ -58,22 +64,95 @@
         log-chan (async/chan (async/sliding-buffer 10))
         all-channels [get-settings-chan
                       set-settings-chan
-                      new-car-state-chan
-                      new-car-state-chan-split1
-                      new-car-state-chan-split2
+                      new-car1-state-chan
+                      new-car1-state-chan-split1
+                      new-car1-state-chan-split2
                       new-site1-data-chan
                       current-site1-data-chan
                       sms-chan
                       error-chan
                       log-chan]]
 
-    #_(process-sms-messages
-       "Receive SMS"
-       ""
-       ""
-       set-settings-chan
-       error-chan
-       log-chan)
+    (process-sms-messages
+     ""
+     ""
+     ""
+     [(fn [sms]
+        (try
+          (better-cond
+           :let [body (get sms "body")
+                 match (re-find #"^\s*(\d\d?\d?)%\s+(\d\d?):(\d\d?)\s*$" body)
+                 target-percent (Integer/parseInt (get match 1))
+                 target-hour (Integer/parseInt (get match 2))
+                 target-minute (Integer/parseInt (get match 3))]
+
+           :do (-> (java.time.LocalDateTime/now)
+                   (.withHour target-hour)
+                   (.withMinute target-minute)
+                   (.withSecond 0)
+                   (.withNano 0))
+
+           :let [car1-state (async/<!! current-car1-state-chan)]
+
+           (nil? car1-state)
+           false
+
+           :let [current-site (first (filter #(site/is-car-here? % car1-state) solar-sites))]
+
+           (nil? current-site)
+           false
+
+           :let [settings-key (str (site/get-id current-site) (car/get-vin car1))
+                 settings-action (fn [settings]
+                                   (-> settings
+                                       (assoc-in [settings-key "target_time_hour"] target-hour)
+                                       (assoc-in [settings-key "target_time_minute"] target-minute)
+                                       (assoc-in [settings-key "target_time_second"] target-percent)))]
+           (and (some? settings-action)
+                (false? (async/>!! set-settings-chan settings-action)))
+           (throw (ex-info "Channel closed" {}))
+
+           :else
+           true)
+          (catch NumberFormatException e
+            false)
+          (catch java.time.DateTimeException e
+            false)))
+
+      (fn [sms]
+        (try
+          (better-cond
+           :let [body (get sms "body")
+                 match (re-find #"^\s*[bB]uffer\s+(\d+)\s*$" body)
+                 power-buffer-watts (Integer/parseInt (get match 1))]
+
+           :let [car1-state (async/<!! current-car1-state-chan)]
+
+           (nil? car1-state)
+           false
+
+           :let [current-site (first (filter #(site/is-car-here? % car1-state) solar-sites))]
+
+           (nil? current-site)
+           false
+
+           :let [settings-key (str (site/get-id current-site) (car/get-vin car1))
+                 settings-action (fn [settings]
+                                   (-> settings
+                                       (assoc-in [settings-key "power_buffer_watts"] power-buffer-watts)))]
+           (and (some? settings-action)
+                (false? (async/>!! set-settings-chan settings-action)))
+           (throw (ex-info "Channel closed" {}))
+
+           :else
+           true)
+          (catch NumberFormatException e
+            false)
+          (catch java.time.DateTimeException e
+            false)))]
+
+     error-chan
+     log-chan)
 
     (provide-settings
      "Settings"
@@ -84,47 +163,47 @@
      log-chan)
 
     (get-car-state
-      ""
-     car
-     new-car-state-chan
+     ""
+     car1
+     new-car1-state-chan
      error-chan
      log-chan)
 
     (split-channel
-     new-car-state-chan
-     [new-car-state-chan-split1 new-car-state-chan-split2 new-car-state-chan-split3]
+     new-car1-state-chan
+     [new-car1-state-chan-split1 new-car1-state-chan-split2 new-car1-state-chan-split3]
      error-chan
      log-chan)
 
     (provide-current-channel-value
-     new-car-state-chan-split3
-     current-car-state-chan
+     new-car1-state-chan-split3
+     current-car1-state-chan
      error-chan
      log-chan)
 
-    (get-site-data
-      ""
-     (second solar-sites)
-     new-site2-data-chan
-     error-chan
-     log-chan)
+    #_(get-site-data
+       ""
+       (second solar-sites)
+       new-site2-data-chan
+       error-chan
+       log-chan)
 
-    (provide-current-channel-value
-     new-site2-data-chan
-     current-site2-data-chan
-     error-chan
-     log-chan)
+    #_(provide-current-channel-value
+       new-site2-data-chan
+       current-site2-data-chan
+       error-chan
+       log-chan)
 
-    (regulate-charge-rate
-      ""
-     (-> (default-regulator/->DefaultRegulator car (second solar-sites))
-         (regulator/with-regulation-creater (target-time-regulation-creater/->TargetTimeRegulationCreater get-settings-chan)))
-     new-car-state-chan-split1
-     current-site2-data-chan
-     error-chan
-     log-chan)
+    #_(regulate-charge-rate
+       ""
+       (-> (default-regulator/->DefaultRegulator car (second solar-sites))
+           (regulator/with-regulation-creater (target-time-regulation-creater/->TargetTimeRegulationCreater get-settings-chan)))
+       new-car-state-chan-split1
+       current-site2-data-chan
+       error-chan
+       log-chan)
 
-    (log-loop :info log-chan error-chan)
+    (log-loop :verbose log-chan error-chan)
 
     (.addShutdownHook
      (Runtime/getRuntime)

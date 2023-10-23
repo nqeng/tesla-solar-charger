@@ -2,6 +2,7 @@
 
 (defprotocol Site
   (get-name [site])
+  (get-id [site])
   (power-watts-to-current-amps [site power-watts])
   (is-car-here? [site car-state])
   (get-data [site request]))

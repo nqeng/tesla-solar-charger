@@ -1,6 +1,7 @@
 (ns tesla-solar-charger.implementations.simple-regulation-creater
   (:require
    [tesla-solar-charger.interfaces.car :as car]
+   [clojure.core.async :as async]
    [better-cond.core :refer [cond] :rename {cond better-cond}]
    [tesla-solar-charger.interfaces.site :as site]
    [tesla-solar-charger.interfaces.regulator :as regulator]))
@@ -34,14 +35,15 @@
     (< num min) min
     :else       num))
 
-(defrecord SimpleRegulationCreater [power-buffer-watts max-climb-amps max-drop-amps]
+(defrecord SimpleRegulationCreater [settings-chan]
   regulator/RegulationCreater
   (create-regulation [regulation-creater regulator car-state site-data]
     (let [regulation (regulator/->ChargeRateRegulation car-state site-data)
           last-attempted-regulation (regulator/get-last-attempted-regulation regulator)
           last-successful-regulation (regulator/get-last-successful-regulation regulator)
           first-successful-regulation (regulator/get-first-successful-regulation regulator)
-          site (regulator/get-site regulator)]
+          site (regulator/get-site regulator)
+          car (regulator/get-car regulator)]
       (better-cond
        (and
         (some? last-attempted-regulation)
@@ -82,8 +84,6 @@
 
        :let [data-point (last (site/get-points site-data))]
 
-       :do (println (format "last successful regulation: %s" last-successful-regulation))
-
        (and
         (true? (regulator/used-solar-data? last-successful-regulation))
         (= (site/get-time data-point)
@@ -95,11 +95,21 @@
        (-> regulation
            (regulator/add-message "No excess power"))
 
+       :let [settings (async/<!! settings-chan)]
+
+       (nil? settings)
+       (throw (ex-info "Channel closed" {}))
+
+       :let [regulator-settings (get settings (str (site/get-id site) (car/get-vin car)))]
+
        :else
-       (let [excess-power (site/get-excess-power-watts data-point)
+       (let [power-buffer-watts (get regulator-settings "power_buffer_watts" 0)
+             excess-power (site/get-excess-power-watts data-point)
              available-power-watts (- excess-power power-buffer-watts)
              current-rate-amps (car/get-charge-rate-amps car-state)
              max-charge-rate-amps (car/get-max-charge-rate-amps car-state)
+             max-climb-amps (get regulator-settings "max_climb_amps" max-charge-rate-amps)
+             max-drop-amps (get regulator-settings "max_drop_amps" max-charge-rate-amps)
              adjustment-rate-amps (site/power-watts-to-current-amps site available-power-watts)
              adjustment-rate-amps (limit adjustment-rate-amps (- max-drop-amps) max-climb-amps)
              new-charge-rate-amps (-> current-rate-amps
