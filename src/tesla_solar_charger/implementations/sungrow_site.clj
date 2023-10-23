@@ -1,11 +1,163 @@
 (ns tesla-solar-charger.implementations.sungrow-site
   (:require
+   [clj-http.client :as client]
+   [cheshire.core :as json]
+   [clojure.string :as str]
    [tesla-solar-charger.interfaces.car :as car]
-   [better-cond.core :as b]
-   [tesla-solar-charger.time-utils :refer :all]
-   [tesla-solar-charger.sungrow :as sungrow]
+   [better-cond.core :refer [cond] :rename {cond better-cond}]
    [tesla-solar-charger.interfaces.site :as site]
-   [tesla-solar-charger.time-utils :as time-utils]))
+   [tesla-solar-charger.utils :as utils]))
+
+(defn create-data-point-timestamp
+  "15/05/2023:14:00:00 => 20230515140000"
+  [datetime]
+  (.format
+   datetime
+   (java.time.format.DateTimeFormatter/ofPattern "yyyyMMddHHmmss")))
+
+(defn round-up-to-minute-interval
+  [datetime interval-minutes]
+  (let [zone-offset (.getOffset (.getRules (java.time.ZoneId/systemDefault)) datetime)
+        interval-seconds (* interval-minutes 60)
+        seconds (.toEpochSecond datetime zone-offset)
+        mod-seconds (mod seconds interval-seconds)
+        new-seconds (+ seconds (- interval-seconds mod-seconds))
+        new-time (java.time.LocalDateTime/ofEpochSecond new-seconds 0 zone-offset)]
+    new-time))
+
+(defn round-down-to-minute-interval
+  [datetime interval-minutes]
+  (let [zone-offset (.getOffset (.getRules (java.time.ZoneId/systemDefault)) datetime)
+        interval-seconds (* interval-minutes 60)
+        seconds (.toEpochSecond datetime zone-offset)
+        mod-seconds (mod seconds interval-seconds)
+        new-seconds (- seconds mod-seconds)
+        new-time (java.time.LocalDateTime/ofEpochSecond new-seconds 0 zone-offset)]
+    new-time))
+
+(defn get-latest-data-publish-time
+  [datetime data-interval-minutes]
+  (-> datetime
+      (round-down-to-minute-interval data-interval-minutes)))
+
+(defn get-latest-data-timestamp
+  [datetime data-interval-minutes]
+  (-> datetime
+      (get-latest-data-publish-time data-interval-minutes)
+      create-data-point-timestamp))
+
+(defn get-next-data-publish-time
+  [datetime data-interval-minutes]
+  (-> datetime
+      (round-up-to-minute-interval data-interval-minutes)))
+
+(defn login
+  [username password api-key]
+  (try
+    (let [response
+          (client/post
+           "https://augateway.isolarcloud.com/v1/userService/login"
+           {:form-params {:appkey api-key
+                          :sys_code "900"
+                          :user_account username
+                          :user_password password}
+            :content-type :json})
+          json (json/parse-string (:body response))
+          login-state (get-in json ["result_data" "login_state"])
+          tries-left (get-in json ["result_data" "remain_times"])
+          error (get json "result_msg")
+          error-code (get json "result_code")
+          user-id (get-in json ["result_data" "user_id"])
+          token (get-in json ["result_data" "token"])]
+      (cond
+        (= "1" login-state)
+        token
+        (= "0" login-state)
+        (throw (ex-info
+                (str "Sungrow login failed; authentication error (" tries-left " tries left)")
+                {:type :err-sungrow-login-auth}))
+        (= "-1" login-state)
+        (throw (ex-info
+                "Sungrow login failed; invalid username"
+                {:type :err-sungrow-login-auth}))
+        (= "2" login-state)
+        (throw (ex-info
+                "Sungrow login failed; too many failed attempts"
+                {:type :err-sungrow-login-auth}))
+        (= "E916" error-code)
+        (throw (ex-info
+                "Sungrow login failed; Login too frequently"
+                {:type :err-sungrow-login-too-frequent}))
+        (= "009" error-code)
+        (throw (ex-info
+                "Sungrow login failed; Username or password empty"
+                {:type :err-sungrow-login-auth}))
+        :else
+        (throw (ex-info
+                (str "Sungrow login failed; " error)
+                {:type :err-sungrow-login-other}))))
+    (catch java.net.UnknownHostException e
+      (let [error (.getMessage e)]
+        (throw (ex-info
+                (str "Network error; " error)
+                {:type :network-error}))))
+    (catch java.net.NoRouteToHostException e
+      (let [error (.getMessage e)]
+        (throw (ex-info
+                (str "Network error; " error)
+                {:type :network-error}))))))
+
+(defn get-data
+  [token start-time end-time api-key data-interval-minutes & data-points]
+  (try
+    (let [ps-keys (map first data-points)
+          points (map second data-points)
+          response (client/post
+                    "https://augateway.isolarcloud.com/v1/commonService/queryMutiPointDataList"
+                    {:form-params {:appkey api-key
+                                   :sys_code "200"
+                                   :token token
+                                   :user_id ""
+                                   :start_time_stamp (get-latest-data-timestamp start-time data-interval-minutes)
+                                   :end_time_stamp (get-latest-data-timestamp end-time data-interval-minutes)
+                                   :minute_interval data-interval-minutes
+                                   :ps_key (str/join "," ps-keys)
+                                   :points (str/join "," points)}
+                     :content-type :json})
+
+          json (json/parse-string (:body response))
+          data (get json "result_data")
+          error (get json "result_msg")
+          code (get json "result_code")]
+      (cond
+        (not (nil? data))
+        data
+        (and (= "1" code) (= "success" error))
+        (throw (ex-info
+                "Sungrow data request failed; invalid token or device/data ids"
+                {:type :err-sungrow-auth-failed}))
+        (and (= "009" code) (= "er_missing_parameter:user_id" error))
+        (throw (ex-info
+                "Sungrow data request failed; no token or user id provided"
+                {:type :err-sungrow-auth-failed}))
+        (= "009" code)
+        (throw (ex-info
+                "Sungrow data request failed; missing device ids or data point ids"
+                {:type :err-could-not-get-sungrow-data}))
+        :else
+        (throw (ex-info
+                (str "Sungrow data request failed; " error)
+                {:type :err-could-not-get-sungrow-data}))))
+    (catch java.net.UnknownHostException e
+      (let [error (.getMessage e)]
+        (throw (ex-info
+                (str "Network error; " error)
+                {:type :network-error}))))
+    (catch java.net.NoRouteToHostException e
+      (let [error (.getMessage e)]
+        (throw (ex-info
+                (str "Network error; " error)
+                {:type :network-error}))))))
 
 (defn euclidean-distance
   [x1 y1 x2 y2]
@@ -25,7 +177,7 @@
   (get-time [point] (get point :time))
   (get-excess-power-watts [point] (get point :excess-power-watts)))
 
-(defrecord SungrowSite [name latitude longitude username password values]
+(defrecord SungrowSite [name latitude longitude username password api-key data-interval-minutes values]
 
   site/Site
 
@@ -36,70 +188,69 @@
         (car/get-longitude car-state)
         latitude
         longitude) 0.0005))
-  (has-new-data-since-request? [site request]
-    (or
-     (nil? request)
-     (nil? (:end-time request))
-     (nil? (:latest-data-available-time site))
-     (.isAfter (:latest-data-available-time site) (:end-time request))))
 
   (power-watts-to-current-amps [site power-watts] (/ power-watts 687.5))
 
   (get-data [site request]
     (try
-      (b/cond
-        (nil? (:start-time request))
-        nil
+      (better-cond
+       (nil? (:start-time request))
+       nil
 
-        (nil? (:end-time request))
-        nil
+       (nil? (:end-time request))
+       nil
 
-        :let [sungrow-token (if (some? (:sungrow-token site))
-                              (:sungrow-token site)
-                              (sungrow/login username password))]
+       :let [sungrow-token (if (some? (:sungrow-token site))
+                             (:sungrow-token site)
+                             (login username password api-key))]
 
-        :let [data (try
-                     (apply sungrow/get-data
-                            sungrow-token
-                            (:start-time request)
-                            (:end-time request)
-                            5
-                            (map last values))
-                     (catch clojure.lang.ExceptionInfo e
-                       (case (:type (ex-data e))
-                         :err-sungrow-auth-failed
-                         (try
-                           (apply sungrow/get-data
-                                  (sungrow/login username password)
-                                  (:start-time request)
-                                  (:end-time request)
-                                  5
-                                  (map last values))
-                           (catch clojure.lang.ExceptionInfo e
-                             (throw e))
-                           (catch Exception e
-                             (throw e)))))
-                     (catch Exception e
-                       (throw e)))]
+       :let [data (try
+                    (apply get-data
+                           sungrow-token
+                           (:start-time request)
+                           (:end-time request)
+                           api-key
+                           data-interval-minutes
+                           (map last values))
+                    (catch clojure.lang.ExceptionInfo e
+                      (case (:type (ex-data e))
+                        :err-sungrow-auth-failed
+                        (try
+                          (apply get-data
+                                 (login username password api-key)
+                                 (:start-time request)
+                                 (:end-time request)
+                                 api-key
+                                 data-interval-minutes
+                                 (map last values))
+                          (catch clojure.lang.ExceptionInfo e
+                            (throw e))
+                          (catch Exception e
+                            (throw e)))))
+                    (catch Exception e
+                      (throw e)))]
 
-        :let [site (assoc site :next-data-available-time (.plusSeconds (sungrow/get-next-data-publish-time (time-now)) 60))]
-        :let [site (assoc site :latest-data-available-time (sungrow/get-latest-data-publish-time (time-now)))]
-        :let [excess-power-keys (:excess-power-watts values)
-              excess-power (-> data
-                               (get-in excess-power-keys)
-                               first
-                               (get 1 "--"))
-              excess-power (try (- (Float/parseFloat excess-power)) (catch Exception e nil))
-              time (-> data
-                       (get-in excess-power-keys)
-                       first
-                       (get 0 (time-utils/format-time "yyyyMMddHHmmss" (:latest-data-available-time site)))
-                       (time-utils/parse-time "yyyyMMddHHmmss"))]
+       :let [excess-power-keys (:excess-power-watts values)
+             excess-power (-> data
+                              (get-in excess-power-keys)
+                              first
+                              (get 1 "--"))
+             excess-power (try (- (Float/parseFloat excess-power)) (catch Exception e nil))
+             time (-> data
+                      (get-in excess-power-keys)
+                      first
+                      (get 0 (utils/format-time "yyyyMMddHHmmss" (get-latest-data-publish-time (utils/time-now) data-interval-minutes)))
+                      (utils/parse-time "yyyyMMddHHmmss"))]
 
-        :let [data (-> (->SungrowSiteData)
-                       (site/add-point (->SungrowSiteDataPoint time excess-power)))]
+       :let [next-data-available-time (if (nil? excess-power)
+                                        (.plusSeconds time 60)
+                                        (.plusSeconds (get-next-data-publish-time time data-interval-minutes) 60))]
+       :let [site (assoc site :next-data-available-time next-data-available-time)]
 
-        [site data])
+       :let [data (-> (->SungrowSiteData)
+                      (site/add-point (->SungrowSiteDataPoint time excess-power)))]
+
+       [site data])
       (catch clojure.lang.ExceptionInfo e
         (throw e))
       (catch Exception e
@@ -112,5 +263,9 @@
               146.79517661638516
               "reuben@nqeng.com.au"
               "sungrownqe123"
+              "93D72E60331ABDCDC7B39ADC2D1F32B3"
+              5
               {:excess-power-watts ["1152381_7_2_3" "p8018"]})]
-    (site/get-data site {:start-time (time-now) :end-time (time-now)})))
+    (site/get-data site {:start-time (utils/time-now) :end-time (utils/time-now)})))
+
+
