@@ -1,15 +1,15 @@
 (ns tesla-solar-charger.implementations.dummy-tesla
   (:require
    [tesla-solar-charger.interfaces.car :as car]
-   [tesla-solar-charger.time-utils :as time-utils]
+   [tesla-solar-charger.utils :as utils]
    [cheshire.core :as json]))
 
 (defrecord DummyTeslaState [object]
 
   car/CarState
-  (get-time [state] (time-utils/time-from-epoch-millis (get-in object ["charge_state" "timestamp"])))
+  (get-time [state] (utils/time-from-epoch-millis (get-in object ["charge_state" "timestamp"])))
 
-  (get-id [state] (str (time-utils/time-now)))
+  (get-id [state] (str (utils/time-now)))
 
   (is-charging? [state] (= "Charging" (get-in object ["charge_state" "charging_state"])))
 
@@ -40,7 +40,13 @@
 
   (will-reach-target-by? [state target-percent target-time]
     (< (car/get-minutes-to-target-percent state target-percent)
-       (time-utils/calc-minutes-between-times (car/get-time state) target-time)))
+       (utils/calc-minutes-between-times (car/get-time state) target-time)))
+
+  (should-override-to-reach-target?
+    [state target-percent target-time]
+    (let [minutes-to-target-percent-at-max-rate (car/get-minutes-to-target-percent-at-max-rate state target-percent)
+          minutes-left-to-charge (utils/calc-minutes-between-times (car/get-time state) target-time)]
+      (< minutes-left-to-charge minutes-to-target-percent-at-max-rate)))
 
   (get-latitude [state] (get-in object ["drive_state" "latitude"]))
 
@@ -110,21 +116,10 @@
 
       (spit (str (car/get-vin car) ".json") (json/generate-string (:object new-state) {:pretty true}))))
 
-  (set-charge-limit [car new-charge-limit-percent]
-    (let [new-state
-          (try
-            (-> (DummyTeslaState. (json/parse-string (slurp (str (car/get-vin car) ".json")))))
-            (catch Exception e
-              default-state))
-          new-state (assoc-in new-state [:object "charge_state" "charge_limit_soc"] new-charge-limit-percent)]
-
-      (spit (str (car/get-vin car) ".json") (json/generate-string (:object new-state) {:pretty true}))))
-
   (restore-state [car state]
     (let [charge-rate-amps (car/get-charge-rate-amps state)
           charge-limit-percent (car/get-charge-limit-percent state)]
-      (car/set-charge-rate car charge-rate-amps)
-      (car/set-charge-limit car charge-limit-percent))))
+      (car/set-charge-rate car charge-rate-amps))))
 
 (comment
   (let [car (->DummyTesla "1234")
@@ -143,14 +138,15 @@
     (assert (= 120 (car/get-minutes-to-full-charge car-state)))
     (printf "Reaching %s%% by %s at %sA%n"
             (car/get-charge-limit-percent car-state)
-            (time-utils/format-time "HH:mm:ss" (.plusMinutes (car/get-time car-state) (car/get-minutes-to-full-charge car-state)))
+            (utils/format-time "HH:mm:ss" (.plusMinutes (car/get-time car-state) (car/get-minutes-to-full-charge car-state)))
             (car/get-charge-rate-amps car-state))
     (printf "Will reach %s%% by %s at %sA%n"
             target-percent
-            (time-utils/format-time "HH:mm:ss" (.plusMinutes (car/get-time car-state) (car/get-minutes-to-target-percent car-state target-percent)))
+            (utils/format-time "HH:mm:ss" (.plusMinutes (car/get-time car-state) (car/get-minutes-to-target-percent car-state target-percent)))
             (car/get-charge-rate-amps car-state))
     (printf "At max rate, will reach %s%% by %s at %sA%n"
             target-percent
-            (time-utils/format-time "HH:mm:ss" (.plusMinutes (car/get-time car-state) (car/get-minutes-to-target-percent-at-max-rate car-state target-percent)))
-            (car/get-max-charge-rate-amps car-state))))
+            (utils/format-time "HH:mm:ss" (.plusMinutes (car/get-time car-state) (car/get-minutes-to-target-percent-at-max-rate car-state target-percent)))
+            (car/get-max-charge-rate-amps car-state))
+    (assert ())))
 
