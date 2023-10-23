@@ -5,7 +5,6 @@
   (get-name [car])
   (get-state [car])
   (set-charge-rate [car new-charge-rate-amps])
-  (set-charge-limit [car new-charge-limit-percent])
   (restore-state [car state]))
 
 (defprotocol CarState
@@ -17,6 +16,7 @@
   (get-charge-limit-percent [state])
   (get-minutes-to-target-percent [state target-percent])
   (get-minutes-to-target-percent-at-max-rate [state target-percent])
+  (should-override-to-reach-target? [state target-percent target-time])
   (get-minutes-to-full-charge [state])
   (get-max-charge-rate-amps [state])
   (get-latitude [state])
