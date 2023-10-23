@@ -1,7 +1,7 @@
 (ns tesla-solar-charger.gophers.process-sms-messages
   (:require
    [cheshire.core :as json]
-   [tesla-solar-charger.time-utils :as time-utils]
+   [tesla-solar-charger.utils :as utils]
    [clojure.core.async :as async]
    [clj-http.client :as client]))
 
@@ -57,13 +57,13 @@
           (doseq [sms-message sms-messages]
             (mark-as-read clicksend-username clicksend-api-key sms-message)
             (process-sms-message log-prefix sms-message set-settings-chan log-chan))
-          (when-let [next-state-available-time (time-utils/time-after-seconds 2)]
+          (when-let [next-state-available-time (utils/time-after-seconds 5)]
             (when (.isAfter next-state-available-time (java.time.LocalDateTime/now))
               (async/>! log-chan {:level :info
                                   :prefix log-prefix
                                   :message (format "Sleeping until %s"
-                                                   (time-utils/format-time "yyyy-MM-dd HH:mm:ss" next-state-available-time))})
-              (Thread/sleep (time-utils/millis-between-times (java.time.LocalDateTime/now) next-state-available-time))))
+                                                   (utils/format-time "yyyy-MM-dd HH:mm:ss" next-state-available-time))})
+              (Thread/sleep (utils/millis-between-times (java.time.LocalDateTime/now) next-state-available-time))))
           (recur)))
       (catch clojure.lang.ExceptionInfo e
         (async/>! error-chan e))
