@@ -42,11 +42,11 @@
           (doseq [sms sms-messages]
             (mark-as-read clicksend-username clicksend-api-key sms)
             (doseq [processor message-processors
-                    :let [result (sms/process-sms processor sms)]
-                    :while (false? result)]
-              (async/>! log-chan {:level :verbose
-                                  :prefix log-prefix
-                                  :message (format "processor %s returned %s" processor result)})))
+                    :let [result (sms/process-sms processor sms)
+                          _ (async/>! log-chan {:level :verbose
+                                                :prefix log-prefix
+                                                :message (format "Processor %s returned %s" (get (re-find #"(\w+\.)+(.*)@.*$" (str processor)) 2) result)})]
+                    :while (false? result)]))
           (when-let [next-state-available-time (utils/time-after-seconds 5)]
             (when (.isAfter next-state-available-time (java.time.LocalDateTime/now))
               (async/>! log-chan {:level :info
