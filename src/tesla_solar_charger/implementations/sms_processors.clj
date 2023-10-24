@@ -95,6 +95,45 @@
       (catch NullPointerException e
         false))))
 
+(defrecord SetTargetPercent [set-settings-chan get-settings-chan car car-state-chan solar-sites]
+
+  sms/SMSProcessor
+
+  (process-sms
+    [processor sms]
+    (try
+      (better-cond
+       :let [body (get sms "body")
+             match (re-find #"^\s*[pP]ercent\s+(\d\d?\d?)\s*$" body)
+             target-percent (Integer/parseInt (get match 1))]
+
+       :let [car1-state (async/<!! car-state-chan)]
+
+       (nil? car1-state)
+       (throw (ex-info "Channel closed" {}))
+
+       :let [current-site (first (filter #(site/is-car-here? % car1-state) solar-sites))]
+
+       (nil? current-site)
+       false
+
+       :let [settings-key (str (site/get-id current-site) (car/get-vin car))
+             settings-action (fn [settings]
+                               (-> settings
+                                   (assoc-in [settings-key "target_percent"] target-percent)))]
+       (and (some? settings-action)
+            (false? (async/>!! set-settings-chan settings-action)))
+       (throw (ex-info "Channel closed" {}))
+
+       :else
+       true)
+      (catch NumberFormatException e
+        false)
+      (catch java.time.DateTimeException e
+        false)
+      (catch NullPointerException e
+        false))))
+
 (defrecord SetTargetTime [set-settings-chan get-settings-chan car car-state-chan solar-sites]
 
   sms/SMSProcessor
