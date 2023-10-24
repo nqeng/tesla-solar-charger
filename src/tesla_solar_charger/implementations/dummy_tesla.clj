@@ -19,6 +19,10 @@
 
   (get-charge-limit-percent [state] (get-in object ["charge_state" "charge_limit_soc"]))
 
+  (get-battery-level-percent [state] (get-in object ["charge_state" "battery_level"]))
+
+  (get-charger-power-kilowatts [state] (get-in object ["charge_state" "charger_power"]))
+
   (get-minutes-to-full-charge [state] (get-in object ["charge_state" "minutes_to_full_charge"]))
 
   (get-minutes-to-target-percent [state target-percent]

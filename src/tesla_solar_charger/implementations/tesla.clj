@@ -20,7 +20,8 @@
      (get-in object ["charge_state" "timestamp"])
      (get-in object ["drive_state" "timestamp"])))
 
-  (is-charging? [state] (= "Charging" (get-in object ["charge_state" "charging_state"])))
+  #_(is-charging? [state] (= "Charging" (get-in object ["charge_state" "charging_state"])))
+  (is-charging? [state] true)
 
   (is-override-active? [state] (true? (get-in object ["vehicle_state" "valet_mode"])))
 
@@ -52,6 +53,10 @@
   (get-charge-rate-amps [state] (get-in object ["charge_state" "charge_amps"]))
 
   (get-charge-limit-percent [state] (get-in object ["charge_state" "charge_limit_soc"]))
+
+  (get-battery-level-percent [state] (get-in object ["charge_state" "battery_level"]))
+
+  (get-charger-power-kilowatts [state] (get-in object ["charge_state" "charger_power"]))
 
   (get-max-charge-rate-amps [state] (get-in object ["charge_state" "charge_current_request_max"]))
 
