@@ -56,7 +56,8 @@
       (better-cond
        :let [body (get sms "body")
              match (re-find #"^\s*[pP]ercent\s+(\d\d?\d?)\s*$" body)
-             target-percent (Integer/parseInt (get match 1))]
+             target-percent (Integer/parseInt (get match 1))
+             target-percent (utils/limit target-percent 0 100)]
 
        :let [car1-state (async/<!! car-state-chan)]
 
