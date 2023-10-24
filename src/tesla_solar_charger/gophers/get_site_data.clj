@@ -35,10 +35,10 @@
               :network-error
 
               (do
-                (Thread/sleep 10000)
                 (async/>! log-chan {:level :error
                                     :prefix log-prefix
-                                    :message (ex-message e)}))
+                                    :message (ex-message e)})
+                (Thread/sleep 10000))
               (throw e))))
 
         (recur site))
