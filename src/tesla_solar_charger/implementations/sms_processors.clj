@@ -104,7 +104,7 @@
     (try
       (better-cond
        :let [body (get sms "body")
-             match (re-find #"^\s*[tT]ime/s+(/d/d?):(\d\d?)\s*$" body)
+             match (re-find #"^\s*[tT]ime\s+(\d\d?):(\d\d?)\s*$" body)
              target-hour (Integer/parseInt (get match 1))
              target-minute (Integer/parseInt (get match 2))]
 
