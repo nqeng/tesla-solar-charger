@@ -110,6 +110,16 @@
                        :accept :json})
             json (json/parse-string (:body response))]
         json)
+      (catch java.net.UnknownHostException e
+        (let [error (.getMessage e)]
+          (throw (ex-info
+                  (str "Network error; " error)
+                  {:type :network-error}))))
+      (catch java.net.NoRouteToHostException e
+        (let [error (.getMessage e)]
+          (throw (ex-info
+                  (str "Network error; " error)
+                  {:type :network-error}))))
       (catch clojure.lang.ExceptionInfo e
         (let [error (-> (ex-data e)
                         (:body)
@@ -122,5 +132,4 @@
   (restore-state [car state]
     (let [charge-rate-amps (car/get-charge-rate-amps state)
           charge-limit-percent (car/get-charge-limit-percent state)]
-      (car/set-charge-rate car charge-rate-amps)
-      (car/set-charge-limit car charge-limit-percent))))
+      (car/set-charge-rate car charge-rate-amps))))
