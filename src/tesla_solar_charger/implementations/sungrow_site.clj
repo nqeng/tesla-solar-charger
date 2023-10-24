@@ -260,16 +260,6 @@
       (catch Exception e
         (throw e)))))
 
-(comment
-  (let [site (->SungrowSite
-              "North Queensland Engineering"
-              -19.291017028657112
-              146.79517661638516
-              "reuben@nqeng.com.au"
-              "sungrownqe123"
-              "93D72E60331ABDCDC7B39ADC2D1F32B3"
-              5
-              {:excess-power-watts ["1152381_7_2_3" "p8018"]})]
-    (site/get-data site {:start-time (utils/time-now) :end-time (utils/time-now)})))
+
 
 
