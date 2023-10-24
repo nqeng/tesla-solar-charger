@@ -133,4 +133,42 @@
       (catch NullPointerException e
         false))))
 
+(defrecord SetMaxClimb [set-settings-chan get-settings-chan car car-state-chan solar-sites]
 
+  sms/SMSProcessor
+
+  (process-sms
+    [processor sms]
+    (try
+      (better-cond
+       :let [car-state (async/<!! car-state-chan)]
+
+       (nil? car-state)
+       (throw (ex-info "Channel closed" {}))
+
+       :let [body (get sms "body")
+             match (re-find #"^\s*[Mm]ax\s+[Cc]limb\s+(\d\d?)\s*$" body)
+             max-climb-amps (Integer/parseInt (get match 1))
+             max-climb-amps (utils/limit max-climb-amps 0 (car/get-max-charge-rate-amps car-state))]
+
+       :let [current-site (first (filter #(site/is-car-here? % car-state) solar-sites))]
+
+       (nil? current-site)
+       false
+
+       :let [settings-key (str (site/get-id current-site) (car/get-vin car))
+             settings-action (fn [settings]
+                               (-> settings
+                                   (assoc-in [settings-key "max_climb_amps"] max-climb-amps)))]
+       (and (some? settings-action)
+            (false? (async/>!! set-settings-chan settings-action)))
+       (throw (ex-info "Channel closed" {}))
+
+       :else
+       true)
+      (catch NumberFormatException e
+        false)
+      (catch java.time.DateTimeException e
+        false)
+      (catch NullPointerException e
+        false))))
