@@ -130,11 +130,53 @@
        (-> regulation
            (regulator/add-message "No excess power"))
 
+       :let [data-point (last (site/get-points site-data))]
+
+       (or
+        (nil? target-percent)
+        (nil? target-time)
+        (> (car/get-battery-level-percent car-state) target-percent)
+        (.isAfter (car/get-time car-state) target-time)
+        )
+       (let [power-buffer-watts (get regulator-settings "power_buffer_watts" 0)
+             excess-power (site/get-excess-power-watts data-point)
+             available-power-watts (- excess-power power-buffer-watts)
+             current-rate-amps (car/get-charge-rate-amps car-state)
+             max-charge-rate-amps (car/get-max-charge-rate-amps car-state)
+             max-climb-amps (get regulator-settings "max_climb_amps" max-charge-rate-amps)
+             max-drop-amps (get regulator-settings "max_drop_amps" max-charge-rate-amps)
+             adjustment-rate-amps (site/power-watts-to-current-amps site available-power-watts)
+             adjustment-rate-amps (limit adjustment-rate-amps (- max-drop-amps) max-climb-amps)
+             new-charge-rate-amps (-> current-rate-amps
+                                      (+ adjustment-rate-amps)
+                                      float
+                                      Math/round
+                                      int
+                                      (limit 0 max-charge-rate-amps))]
+         (-> regulation
+             (regulator/set-used-solar-data true)
+             (regulator/set-charge-rate-amps new-charge-rate-amps)
+             (regulator/add-message (format "No target percent or no target time"))
+             (regulator/add-message (format "Excess power is %.2fW (%.2fW available)"
+                                            (float excess-power)
+                                            (float available-power-watts)))
+             (regulator/add-message (format "Altering charge rate to %sA (%s%s from %sA)"
+                                            new-charge-rate-amps
+                                            (if (neg? adjustment-rate-amps) "-" "+")
+                                            (abs (int adjustment-rate-amps))
+                                            current-rate-amps))))
+
        :else
        (let [power-buffer-watts (get regulator-settings "power_buffer_watts" 0)
              data-point (last (site/get-points site-data))
              excess-power (site/get-excess-power-watts data-point)
-             available-power-watts (- excess-power power-buffer-watts)
+             time-to-target-percent-minutes (car/get-minutes-to-target-percent car-state target-percent)
+             time-left-minutes (utils/calc-minutes-between-times (car/get-time car-state) target-time)
+             available-power-adjustment (-> (- time-to-target-percent-minutes time-left-minutes)
+                                            (/ time-left-minutes)
+                                            (* power-buffer-watts)
+                                            (utils/limit (- power-buffer-watts) power-buffer-watts))
+             available-power-watts (- excess-power available-power-adjustment)
              current-rate-amps (car/get-charge-rate-amps car-state)
              max-charge-rate-amps (car/get-max-charge-rate-amps car-state)
              max-climb-amps (get regulator-settings "max_climb_amps" max-charge-rate-amps)
@@ -150,8 +192,17 @@
          (-> regulation
              (regulator/set-used-solar-data true)
              (regulator/set-charge-rate-amps new-charge-rate-amps)
-             (regulator/add-message (format "Excess power is %.2fW (%.2fW available)"
+             (regulator/add-message (format "Reaching %s%% by %s"
+                                            target-percent
+                                            (utils/format-time "HH:mm" target-time)))
+
+             (regulator/add-message (format "Time left: %02d:%02d"
+                                            (int (Math/floor (/ time-left-minutes 60)))
+                                            (int (Math/floor (mod time-left-minutes 60)))))
+             (regulator/add-message (format "Excess power is %.2fW, charging at %.2fW %s the curve (%.2fW available)"
                                             (float excess-power)
+                                            (float available-power-adjustment)
+                                            (if (neg? available-power-adjustment) "below" "above")
                                             (float available-power-watts)))
              (regulator/add-message (format "Altering charge rate to %sA (%s%s from %sA)"
                                             new-charge-rate-amps
