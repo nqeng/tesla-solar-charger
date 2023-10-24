@@ -210,14 +210,14 @@
 
        :let [sungrow-token (if (some? (:sungrow-token site))
                              (:sungrow-token site)
-                             (login username password api-key))]
+                             (login username password sungrow-api-key))]
 
        :let [data (try
                     (apply get-data
                            sungrow-token
                            (:start-time request)
                            (:end-time request)
-                           api-key
+                           sungrow-api-key
                            data-interval-minutes
                            (map last values))
                     (catch clojure.lang.ExceptionInfo e
@@ -225,10 +225,10 @@
                         :err-sungrow-auth-failed
                         (try
                           (apply get-data
-                                 (login username password api-key)
+                                 (login username password sungrow-api-key)
                                  (:start-time request)
                                  (:end-time request)
-                                 api-key
+                                 sungrow-api-key
                                  data-interval-minutes
                                  (map last values))
                           (catch clojure.lang.ExceptionInfo e
