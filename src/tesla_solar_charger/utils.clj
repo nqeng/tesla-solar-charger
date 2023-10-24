@@ -1,6 +1,6 @@
 (ns tesla-solar-charger.utils
   (:require
-    [clj-http.client :as client]
+   [clj-http.client :as client]
    [clojure.core.async :as async])
   (:import
    (java.time.temporal ChronoUnit)
@@ -16,7 +16,10 @@
 
 (defn send-to-ntfy
   [message]
-  (try (client/post "https://ntfy.sh/github-nqeng-tesla-solar-charger" {:body message})))
+  (try
+    (client/post "https://ntfy.sh/github-nqeng-tesla-solar-charger" {:body message})
+    (catch Exception e nil)
+    (catch clojure.lang.ExceptionInfo e nil)))
 
 (defn time-from-epoch-millis
   [millis]
