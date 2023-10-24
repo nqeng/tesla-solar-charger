@@ -65,7 +65,6 @@
          work-current-data-chan (async/chan)
          home-new-data-chan (async/chan (async/sliding-buffer 1))
          home-current-data-chan (async/chan)
-         new-sms-chan (async/chan 5)
          error-chan (async/chan (async/dropping-buffer 1))
          log-chan (async/chan (async/sliding-buffer 10))
          all-channels [get-settings-chan
@@ -79,11 +78,18 @@
                        home-current-data-chan
                        work-new-data-chan
                        work-current-data-chan
-                       new-sms-chan
                        error-chan
                        log-chan]]
 
      (log-loop log-level log-chan error-chan)
+
+     (provide-settings
+       "Settings"
+       "settings.json"
+       get-settings-chan
+       set-settings-chan
+       error-chan
+       log-chan)
 
      (process-sms-messages
       "SMS"
@@ -92,14 +98,6 @@
       [(sms-processors/->SetTargetPercent set-settings-chan get-settings-chan tesla tesla-current-state-chan solar-sites)
        (sms-processors/->SetPowerBuffer set-settings-chan get-settings-chan tesla tesla-current-state-chan solar-sites)
        (sms-processors/->SetTargetTime set-settings-chan get-settings-chan tesla tesla-current-state-chan solar-sites)]
-      error-chan
-      log-chan)
-
-     (provide-settings
-      "Settings"
-      "settings.json"
-      get-settings-chan
-      set-settings-chan
       error-chan
       log-chan)
 
