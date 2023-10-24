@@ -8,25 +8,58 @@
 
 (defn get-sms-messages
   [clicksend-username clicksend-api-key]
-  (-> (client/get
-       "https://rest.clicksend.com/v3/sms/inbound"
-       {:basic-auth [clicksend-username clicksend-api-key]})
-      :body
-      json/parse-string
-      (get "data")
-      (get "data")))
+  (try
+    (-> (client/get
+         "https://rest.clicksend.com/v3/sms/inbound"
+         {:basic-auth [clicksend-username clicksend-api-key]})
+        :body
+        json/parse-string
+        (get "data")
+        (get "data"))
+    (catch java.net.UnknownHostException e
+      (let [error (.getMessage e)]
+        (throw (ex-info
+                (str "Network error; " error)
+                {:type :network-error}))))
+    (catch java.net.NoRouteToHostException e
+      (let [error (.getMessage e)]
+        (throw (ex-info
+                (str "Network error; " error)
+                {:type :network-error}))))))
 
 (defn mark-all-as-read
   [clicksend-username clicksend-api-key]
-  (client/put
-   "https://rest.clicksend.com/v3/sms/inbound-read"
-   {:basic-auth [clicksend-username clicksend-api-key]}))
+  (try
+    (client/put
+     "https://rest.clicksend.com/v3/sms/inbound-read"
+     {:basic-auth [clicksend-username clicksend-api-key]})
+    (catch java.net.UnknownHostException e
+      (let [error (.getMessage e)]
+        (throw (ex-info
+                (str "Network error; " error)
+                {:type :network-error}))))
+    (catch java.net.NoRouteToHostException e
+      (let [error (.getMessage e)]
+        (throw (ex-info
+                (str "Network error; " error)
+                {:type :network-error}))))))
 
 (defn mark-as-read
   [clicksend-username clicksend-api-key sms-message]
-  (client/put
-   (str "https://rest.clicksend.com/v3/sms/inbound-read/" (get sms-message "message_id"))
-   {:basic-auth [clicksend-username clicksend-api-key]}))
+  (try
+    (client/put
+     (str "https://rest.clicksend.com/v3/sms/inbound-read/" (get sms-message "message_id"))
+     {:basic-auth [clicksend-username clicksend-api-key]})
+    (catch java.net.UnknownHostException e
+      (let [error (.getMessage e)]
+        (throw (ex-info
+                (str "Network error; " error)
+                {:type :network-error}))))
+    (catch java.net.NoRouteToHostException e
+      (let [error (.getMessage e)]
+        (throw (ex-info
+                (str "Network error; " error)
+                {:type :network-error}))))))
 
 (defn process-sms-messages
   [log-prefix clicksend-username clicksend-api-key message-processors error-chan log-chan]
@@ -56,6 +89,17 @@
               (Thread/sleep (utils/millis-between-times (java.time.LocalDateTime/now) next-state-available-time))))
           (recur)))
       (catch clojure.lang.ExceptionInfo e
+        (case (:type (ex-data e))
+
+          :network-error
+          (do
+            (async/>! log-chan {:level :error
+                                :prefix log-prefix
+                                :message (ex-message e)})
+            (Thread/sleep 10000))
+
+          (throw e))
+
         (async/>! error-chan e))
       (catch Exception e
         (async/>! error-chan e)))))
