@@ -15,7 +15,7 @@
     (try
       (loop [settings (if (or
                            (clojure.string/blank? settings-filename)
-                           (not (clojure.string/ends-with? ".json")))
+                           (not (clojure.string/ends-with? settings-filename ".json")))
                         default-settings
                         (try
                           (json/parse-string (slurp settings-filename))
