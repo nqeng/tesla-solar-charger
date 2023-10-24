@@ -26,7 +26,6 @@
    [tesla-solar-charger.interfaces.car :as car]))
 
 (def cli-options
-  ;; An option with a required argument
   [["-l" "--log-level" "Log level"
     :default "info"
     :validate [#(contains? #{"info" "verbose" "error"} %) "Must be one of: (info, verbose, error)"]]
