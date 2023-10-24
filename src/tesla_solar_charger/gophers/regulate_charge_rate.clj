@@ -16,7 +16,19 @@
           (when (nil? site-data)
             (throw (ex-info "Channel closed" {})))
 
-          (let [regulator (regulator/regulate regulator car-state site-data log-chan log-prefix)]
+          (let [regulator (try
+                            (regulator/regulate regulator car-state site-data log-chan log-prefix)
+                            (catch clojure.lang.ExceptionInfo e
+                              (case (:type (ex-data e))
+                                :network-error
+                                (do
+                                  (async/>! log-chan {:level :error
+                                                      :prefix log-prefix
+                                                      :message (ex-message e)})
+                                  regulator)
+
+                                (throw e))))]
+
             (recur regulator))))
 
       (catch clojure.lang.ExceptionInfo e
