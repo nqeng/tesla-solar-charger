@@ -25,28 +25,6 @@
    [tesla-solar-charger.interfaces.site :as site]
    [tesla-solar-charger.interfaces.car :as car]))
 
-(def solar-sites
-  [(sungrow-site/->SungrowSite
-    "site1"
-    ""
-    0
-    0
-    ""
-    ""
-    ""
-    5
-    {})
-   (sungrow-site/->SungrowSite
-    "site2"
-    ""
-    0
-    0
-    ""
-    ""
-    ""
-    5
-    {})])
-
 (def cli-options
   ;; An option with a required argument
   [["-l" "--log-level" "Log level"
@@ -71,97 +49,120 @@
 
    :do (log log-level :info nil "Starting...")
 
-   (let [car1 (dummy-tesla/->DummyTesla "1234")
-         car1 (tesla/->Tesla "" "")
+   (let [dummy-tesla (dummy-tesla/->DummyTesla "1234")
+         tesla (tesla/->Tesla "vin" "api-key")
+         work-site (sungrow-site/->SungrowSite "site1" "Work" 0 0 "username" "password" {:excess-power-watts ["ps-id" "ps-key"]} sungrow-site/power-to-current-3-phase)
+         home-site (sungrow-site/->SungrowSite "site2" "Home" 0 0 "username" "password" {:excess-power-watts ["ps-id" "ps-key"]} sungrow-site/power-to-current-2-phase)
+         solar-sites [work-site home-site]
          get-settings-chan (async/chan)
          set-settings-chan (async/chan)
-         new-car1-state-chan (async/chan (async/sliding-buffer 1))
-         current-car1-state-chan (async/chan)
-         new-car1-state-chan-split1 (async/chan (async/sliding-buffer 1))
-         new-car1-state-chan-split2 (async/chan (async/sliding-buffer 1))
-         new-car1-state-chan-split3 (async/chan (async/sliding-buffer 1))
-         new-site1-data-chan (async/chan (async/sliding-buffer 1))
-         current-site1-data-chan (async/chan)
-         new-site2-data-chan (async/chan (async/sliding-buffer 1))
-         current-site2-data-chan (async/chan)
-         sms-chan (async/chan 5)
+         tesla-new-state-chan (async/chan (async/sliding-buffer 1))
+         tesla-current-state-chan (async/chan)
+         tesla-new-state-chan-split1 (async/chan (async/sliding-buffer 1))
+         tesla-new-state-chan-split2 (async/chan (async/sliding-buffer 1))
+         tesla-new-state-chan-split3 (async/chan (async/sliding-buffer 1))
+         work-new-data-chan (async/chan (async/sliding-buffer 1))
+         work-current-data-chan (async/chan)
+         home-new-data-chan (async/chan (async/sliding-buffer 1))
+         home-current-data-chan (async/chan)
+         new-sms-chan (async/chan 5)
          error-chan (async/chan (async/dropping-buffer 1))
          log-chan (async/chan (async/sliding-buffer 10))
          all-channels [get-settings-chan
                        set-settings-chan
-                       new-car1-state-chan
-                       new-car1-state-chan-split1
-                       new-car1-state-chan-split2
-                       new-car1-state-chan-split3
-                       new-site2-data-chan
-                       current-site2-data-chan
-                       current-car1-state-chan
-                       new-site1-data-chan
-                       current-site1-data-chan
-                       sms-chan
+                       tesla-new-state-chan
+                       tesla-current-state-chan
+                       tesla-new-state-chan-split1
+                       tesla-new-state-chan-split2
+                       tesla-new-state-chan-split3
+                       home-new-data-chan
+                       home-current-data-chan
+                       work-new-data-chan
+                       work-current-data-chan
+                       new-sms-chan
                        error-chan
                        log-chan]]
 
      (log-loop log-level log-chan error-chan)
 
      (process-sms-messages
-      ""
-      ""
-      ""
-      [(sms-processors/->SetTargetPercent set-settings-chan get-settings-chan car1 current-car1-state-chan solar-sites)
-       (sms-processors/->SetPowerBuffer set-settings-chan get-settings-chan car1 current-car1-state-chan solar-sites)
-       (sms-processors/->SetTargetTime set-settings-chan get-settings-chan car1 current-car1-state-chan solar-sites)]
+      "SMS"
+      "username"
+      "api-key"
+      [(sms-processors/->SetTargetPercent set-settings-chan get-settings-chan tesla tesla-current-state-chan solar-sites)
+       (sms-processors/->SetPowerBuffer set-settings-chan get-settings-chan tesla tesla-current-state-chan solar-sites)
+       (sms-processors/->SetTargetTime set-settings-chan get-settings-chan tesla tesla-current-state-chan solar-sites)]
       error-chan
       log-chan)
 
      (provide-settings
-      ""
-      ""
+      "Settings"
+      "settings.json"
       get-settings-chan
       set-settings-chan
       error-chan
       log-chan)
 
      (get-car-state
-      ""
-      car1
-      new-car1-state-chan
+      "State (Tesla)"
+      tesla
+      tesla-new-state-chan
       error-chan
       log-chan)
 
      (split-channel
-      new-car1-state-chan
-      [new-car1-state-chan-split1 new-car1-state-chan-split2 new-car1-state-chan-split3]
+      tesla-new-state-chan
+      [tesla-new-state-chan-split1 tesla-new-state-chan-split2 tesla-new-state-chan-split3]
       error-chan
       log-chan)
 
      (provide-current-channel-value
-      new-car1-state-chan-split3
-      current-car1-state-chan
+      tesla-new-state-chan-split3
+      tesla-current-state-chan
       error-chan
       log-chan)
 
      (get-site-data
-        ""
-        (second solar-sites)
-        new-site2-data-chan
-        error-chan
-        log-chan)
+      "Data (Work)"
+      work-site
+      work-new-data-chan
+      error-chan
+      log-chan)
 
      (provide-current-channel-value
-        new-site2-data-chan
-        current-site2-data-chan
-        error-chan
-        log-chan)
+      work-new-data-chan
+      work-current-data-chan
+      error-chan
+      log-chan)
+
+     (get-site-data
+      "Data (Home)"
+      home-site
+      home-new-data-chan
+      error-chan
+      log-chan)
+
+     (provide-current-channel-value
+      home-new-data-chan
+      home-current-data-chan
+      error-chan
+      log-chan)
 
      (regulate-charge-rate
-        ""
-        (-> (default-regulator/->DefaultRegulator car1 (second solar-sites))
-            (regulator/with-regulation-creater (target-time-regulation-creater/->TargetTimeRegulationCreater get-settings-chan)))
-        new-car1-state-chan-split1
-        current-site2-data-chan
-        error-chan
-        log-chan)
+      "Regulator (Tesla + Work)"
+      (default-regulator/->DefaultRegulator tesla work-site (target-time-regulation-creater/->TargetTimeRegulationCreater get-settings-chan))
+      tesla-new-state-chan-split1
+      work-current-data-chan
+      error-chan
+      log-chan)
+
+     (regulate-charge-rate
+      "Regulator (Tesla + Home)"
+      (default-regulator/->DefaultRegulator tesla home-site (simple-regulation-creater/->SimpleRegulationCreater get-settings-chan))
+      tesla-new-state-chan-split2
+      home-current-data-chan
+      error-chan
+      log-chan)
 
      (.addShutdownHook
       (Runtime/getRuntime)
