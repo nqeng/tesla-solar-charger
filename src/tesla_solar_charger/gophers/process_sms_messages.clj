@@ -2,6 +2,7 @@
   (:require
    [cheshire.core :as json]
    [tesla-solar-charger.utils :as utils]
+   [tesla-solar-charger.interfaces.sms :as sms]
    [clojure.core.async :as async]
    [clj-http.client :as client]))
 
@@ -37,12 +38,14 @@
         (let [sms-messages (get-sms-messages clicksend-username clicksend-api-key)]
           (async/>! log-chan {:level :info :prefix log-prefix :message (format "Got %s text messages" (count sms-messages))})
           (async/>! log-chan {:level :verbose :prefix log-prefix :message sms-messages})
-          (doseq [sms-message sms-messages]
-            (mark-as-read clicksend-username clicksend-api-key sms-message)
+          (doseq [sms sms-messages]
+            (mark-as-read clicksend-username clicksend-api-key sms)
             (doseq [processor message-processors
-                    :let [result (processor sms-message)]
+                    :let [result (sms/process-sms processor sms)]
                     :while (false? result)]
-              processor))
+              (async/>! log-chan {:level :info
+                                  :prefix log-prefix
+                                  :message (format "processor %s returned %s" processor result)})))
           (when-let [next-state-available-time (utils/time-after-seconds 5)]
             (when (.isAfter next-state-available-time (java.time.LocalDateTime/now))
               (async/>! log-chan {:level :info
