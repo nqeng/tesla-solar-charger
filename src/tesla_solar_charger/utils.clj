@@ -7,6 +7,13 @@
    (java.time LocalDateTime)
    (java.time.format DateTimeFormatter)))
 
+(defn limit
+  [num min max]
+  (cond
+    (> num max) max
+    (< num min) min
+    :else       num))
+
 (defn send-to-ntfy
   [message]
   (try (client/post "https://ntfy.sh/github-nqeng-tesla-solar-charger" {:body message})))
