@@ -177,11 +177,12 @@
   (get-time [point] (get point :time))
   (get-excess-power-watts [point] (get point :excess-power-watts)))
 
-(defrecord SungrowSite [name latitude longitude username password api-key data-interval-minutes values]
+(defrecord SungrowSite [id name latitude longitude username password api-key data-interval-minutes values]
 
   site/Site
 
   (get-name [site] name)
+  (get-id [site] id)
   (is-car-here? [site car-state]
     (< (euclidean-distance
         (car/get-latitude car-state)

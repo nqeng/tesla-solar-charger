@@ -46,9 +46,7 @@
           last-successful-regulation (regulator/get-last-successful-regulation regulator)
           first-successful-regulation (regulator/get-first-successful-regulation regulator)
           site (regulator/get-site regulator)
-          settings (async/<!! settings-chan)]
-      (when (nil? settings)
-        (throw (ex-info "Channel closed" {})))
+          car (regulator/get-car regulator)]
       (better-cond
        (and
         (some? last-attempted-regulation)
@@ -83,9 +81,16 @@
            (regulator/set-charge-rate-amps (car/get-max-charge-rate-amps car-state))
            (regulator/add-message "Override active"))
 
-       :let [target-hour (:target-hour settings)
-             target-minute (:target-minute settings)
-             target-second (:target-second settings)
+       :let [settings (async/<!! settings-chan)]
+
+       (nil? settings)
+       (throw (ex-info "Channel closed" {}))
+
+       :let [regulator-settings (get settings (str (site/get-id site) (car/get-vin car)))]
+
+       :let [target-hour (:target-hour regulator-settings)
+             target-minute (:target-minute regulator-settings)
+             target-second (:target-second regulator-settings)
              target-time (if (and
                               (some? target-hour)
                               (some? target-minute)
@@ -97,7 +102,7 @@
                                (.withNano 0))
                            nil)]
 
-       :let [target-percent (:target-percent settings)]
+       :let [target-percent (:target-percent regulator-settings)]
 
        (and
         (some? target-time)
@@ -126,13 +131,16 @@
            (regulator/add-message "No excess power"))
 
        :else
-       (let [data-point (last (site/get-points site-data))
+       (let [power-buffer-watts (get regulator-settings "power_buffer_watts" 0)
+             data-point (last (site/get-points site-data))
              excess-power (site/get-excess-power-watts data-point)
-             available-power-watts (- excess-power 1000)
+             available-power-watts (- excess-power power-buffer-watts)
              current-rate-amps (car/get-charge-rate-amps car-state)
              max-charge-rate-amps (car/get-max-charge-rate-amps car-state)
+             max-climb-amps (get regulator-settings "max_climb_amps" max-charge-rate-amps)
+             max-drop-amps (get regulator-settings "max_drop_amps" max-charge-rate-amps)
              adjustment-rate-amps (site/power-watts-to-current-amps site available-power-watts)
-             adjustment-rate-amps (limit adjustment-rate-amps (- 8) 8)
+             adjustment-rate-amps (limit adjustment-rate-amps (- max-climb-amps) max-drop-amps)
              new-charge-rate-amps (-> current-rate-amps
                                       (+ adjustment-rate-amps)
                                       float

@@ -23,11 +23,12 @@
   (get-time [point] (get point :time))
   (get-excess-power-watts [point] (get point :excess-power-watts)))
 
-(defrecord DummySite [name latitude longitude]
+(defrecord DummySite [id name latitude longitude]
 
   site/Site
 
   (get-name [site] name)
+  (get-id [site] id)
   (is-car-here? [site car-state]
     (< (euclidean-distance
         (car/get-latitude car-state)
