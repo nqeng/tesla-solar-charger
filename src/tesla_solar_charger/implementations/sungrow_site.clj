@@ -227,7 +227,10 @@
                           (catch clojure.lang.ExceptionInfo e
                             (throw e))
                           (catch Exception e
-                            (throw e)))))
+                            (throw e)))
+
+                        (throw e)
+                        ))
                     (catch Exception e
                       (throw e)))]
 
