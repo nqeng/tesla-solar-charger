@@ -9,11 +9,14 @@
   (async/go
     (try
       (loop [car car]
-        (async/>! log-chan {:level :info :prefix log-prefix :message "Retrieving new state..."})
+        (async/>! log-chan {:level :info :prefix log-prefix :message "Getting new state..."})
         (try
           (let [car-state (car/get-state car)]
-            (async/>! log-chan {:level :info :prefix log-prefix :message "Got new state"})
-            (async/>! log-chan {:level :verbose :prefix log-prefix :message car-state})
+            (async/>! log-chan {:level :info :prefix log-prefix :message "Got state"})
+            (async/>! log-chan {:level :verbose :prefix log-prefix :message (format "{ charging=%s, lat=%s, long=%s }"
+                                                                                    (car/is-charging? car-state)
+                                                                                    (car/get-latitude car-state)
+                                                                                    (car/get-longitude car-state))})
             (when (and (some? car-state)
                        (false? (async/>! output-chan car-state)))
               (throw (ex-info "Channel closed!" {})))

@@ -9,13 +9,14 @@
   (async/go
     (try
       (loop [site site]
-        (async/>! log-chan {:level :info :prefix log-prefix :message "Retrieving new data..."})
+        (async/>! log-chan {:level :info :prefix log-prefix :message "Getting new data..."})
         (try
           (let [request {:start-time (java.time.LocalDateTime/now)
                          :end-time (java.time.LocalDateTime/now)}
                 [site site-data] (site/get-data site request)]
-            (async/>! log-chan {:level :info :prefix log-prefix :message "Got new data"})
-            (async/>! log-chan {:level :verbose :prefix log-prefix :message site-data})
+            (async/>! log-chan {:level :info :prefix log-prefix :message "Got data"})
+            (async/>! log-chan {:level :verbose :prefix log-prefix :message (format "{ excess=%s }"
+                                                                                    (site/get-excess-power-watts (last (site/get-points site-data))))})
             (when (and (some? site-data)
                        (false? (async/>! output-chan site-data)))
               (throw (ex-info "Channel closed!" {})))

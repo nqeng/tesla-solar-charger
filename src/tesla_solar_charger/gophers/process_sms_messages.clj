@@ -43,7 +43,7 @@
             (doseq [processor message-processors
                     :let [result (sms/process-sms processor sms)]
                     :while (false? result)]
-              (async/>! log-chan {:level :info
+              (async/>! log-chan {:level :verbose
                                   :prefix log-prefix
                                   :message (format "processor %s returned %s" processor result)})))
           (when-let [next-state-available-time (utils/time-after-seconds 5)]
