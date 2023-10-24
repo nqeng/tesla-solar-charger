@@ -37,7 +37,7 @@
                 (async/>! log-chan {:level :verbose :prefix log-prefix :message new-settings})
                 (when (and
                        (not (clojure.string/blank? settings-filename))
-                       (clojure.string/ends-with? ".json"))
+                       (clojure.string/ends-with? settings-filename ".json"))
                   (spit settings-filename (json/generate-string new-settings {:pretty true})))
                 (recur new-settings))))))
       (catch clojure.lang.ExceptionInfo e
