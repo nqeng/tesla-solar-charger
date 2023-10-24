@@ -8,7 +8,9 @@
   (async/go
     (try
       (loop [regulator regulator]
-        (async/>! log-chan {:level :verbose :prefix log-prefix :message "..."})
+        (async/>! log-chan {:level :verbose 
+                            :prefix log-prefix 
+                            :message "..."})
         (let [car-state (async/<! car-state-chan)
               site-data (async/<! site-data-chan)]
           (when (nil? car-state)
