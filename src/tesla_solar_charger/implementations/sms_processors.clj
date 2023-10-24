@@ -91,4 +91,49 @@
       (catch java.time.DateTimeException e
         false))))
 
+(defrecord SetTargetTime [set-settings-chan get-settings-chan car car-state-chan solar-sites]
+
+  sms/SMSProcessor
+
+  (process-sms
+    [processor sms]
+    (try
+      (better-cond
+       :let [body (get sms "body")
+             match (re-find #"^\s*[tT]ime/s+(/d/d?):(\d\d?)\s*$" body)
+             target-hour (Integer/parseInt (get match 1))
+             target-minute (Integer/parseInt (get match 2))]
+
+       :do (-> (java.time.LocalDateTime/now)
+               (.withHour target-hour)
+               (.withMinute target-minute)
+               (.withSecond 0)
+               (.withNano 0))
+
+       :let [car-state (async/<!! car-state-chan)]
+
+       (nil? car-state)
+       (throw (ex-info "Channel closed" {}))
+
+       :let [current-site (first (filter #(site/is-car-here? % car-state) solar-sites))]
+
+       (nil? current-site)
+       false
+
+       :let [settings-key (str (site/get-id current-site) (car/get-vin car))
+             settings-action (fn [settings]
+                               (-> settings
+                                   (assoc-in [settings-key "target_time_hour"] target-hour)
+                                   (assoc-in [settings-key "target_time_minute"] target-minute)))]
+       (and (some? settings-action)
+            (false? (async/>!! set-settings-chan settings-action)))
+       (throw (ex-info "Channel closed" {}))
+
+       :else
+       true)
+      (catch NumberFormatException e
+        false)
+      (catch java.time.DateTimeException e
+        false))))
+
 
