@@ -8,6 +8,13 @@
    [tesla-solar-charger.interfaces.site :as site]
    [tesla-solar-charger.utils :as utils]))
 
+(def power-to-current-3-phase 687.5)
+(def power-to-current-3-phase-delta 262.5)
+(def power-to-current-1-phase 231.25)
+(def power-to-current-2-phase 462.5)
+(def data-interval-minutes 5)
+(def sungrow-api-key "93D72E60331ABDCDC7B39ADC2D1F32B3")
+
 (defn create-data-point-timestamp
   "15/05/2023:14:00:00 => 20230515140000"
   [datetime]
@@ -177,7 +184,7 @@
   (get-time [point] (get point :time))
   (get-excess-power-watts [point] (get point :excess-power-watts)))
 
-(defrecord SungrowSite [id name latitude longitude username password api-key data-interval-minutes values]
+(defrecord SungrowSite [id name latitude longitude username password values power-to-current-factor]
 
   site/Site
 
@@ -190,7 +197,7 @@
         latitude
         longitude) 0.0005))
 
-  (power-watts-to-current-amps [site power-watts] (/ power-watts 687.5))
+  (power-watts-to-current-amps [site power-watts] (/ power-watts power-to-current-factor))
 
   (get-data [site request]
     (try
@@ -259,7 +266,5 @@
         (throw e))
       (catch Exception e
         (throw e)))))
-
-
 
 
