@@ -34,10 +34,11 @@
     (try
       (mark-all-as-read clicksend-username clicksend-api-key)
       (loop []
-        (async/>! log-chan {:level :info :prefix log-prefix :message "Retrieving text messages..."})
+        (async/>! log-chan {:level :info :prefix log-prefix :message "Getting text messages..."})
         (let [sms-messages (get-sms-messages clicksend-username clicksend-api-key)]
           (async/>! log-chan {:level :info :prefix log-prefix :message (format "Got %s text messages" (count sms-messages))})
-          (async/>! log-chan {:level :verbose :prefix log-prefix :message sms-messages})
+          (when (not (nil? (seq sms-messages)))
+            (async/>! log-chan {:level :verbose :prefix log-prefix :message sms-messages}))
           (doseq [sms sms-messages]
             (mark-as-read clicksend-username clicksend-api-key sms)
             (doseq [processor message-processors
