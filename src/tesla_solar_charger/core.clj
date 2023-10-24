@@ -3,6 +3,7 @@
   (:require
    [clojure.tools.cli :refer [parse-opts]]
    [tesla-solar-charger.gophers.get-car-state :refer [get-car-state]]
+   [tesla-solar-charger.gophers.publish-data :refer [publish-data]]
    [better-cond.core :refer [cond] :rename {cond better-cond}]
    [tesla-solar-charger.utils :as utils]
    [tesla-solar-charger.gophers.get-site-data :refer [get-site-data]]
@@ -26,9 +27,10 @@
    [tesla-solar-charger.interfaces.car :as car]))
 
 (def cli-options
-  [["-l" "--log-level" "Log level"
-    :default "info"
-    :validate [#(contains? #{"info" "verbose" "error"} %) "Must be one of: (info, verbose, error)"]]
+  [["-l" "--log-level LEVEL" "Log level (verbose, info, error)"
+    :default :info
+    :parse-fn keyword
+    :validate [#(contains? #{:verbose :info :error} %) "Must be one of: (verbose, info, error)"]]
    ["-h" "--help"]])
 
 (defn -main
@@ -43,15 +45,30 @@
 
    :let [log-level (-> options
                        :options
-                       :log-level
-                       keyword)]
+                       :log-level)]
 
    :do (log log-level :info nil "Starting...")
 
    (let [dummy-tesla (dummy-tesla/->DummyTesla "1234")
          tesla (tesla/->Tesla "vin" "api-key")
-         work-site (sungrow-site/->SungrowSite "site1" "Work" 0 0 "username" "password" {:excess-power-watts ["ps-id" "ps-key"]} sungrow-site/power-to-current-3-phase)
-         home-site (sungrow-site/->SungrowSite "site2" "Home" 0 0 "username" "password" {:excess-power-watts ["ps-id" "ps-key"]} sungrow-site/power-to-current-2-phase)
+         work-site (sungrow-site/->SungrowSite 
+                     "site1" 
+                     "Work" 
+                     0 
+                     0 
+                     "sungrow-username" 
+                     "sungrow-password" 
+                     {:excess-power-watts ["ps-id" "ps-key"]} 
+                     sungrow-site/power-to-current-3-phase)
+         home-site (sungrow-site/->SungrowSite
+                    "site2"
+                    "Home"
+                    0
+                    0
+                    "sungrow-username"
+                    "sungrow-password"
+                    {:excess-power-watts ["ps-id" "ps-key"]}
+                    sungrow-site/power-to-current-2-phase)
          solar-sites [work-site home-site]
          get-settings-chan (async/chan)
          set-settings-chan (async/chan)
@@ -83,20 +100,30 @@
      (log-loop log-level log-chan error-chan)
 
      (provide-settings
-       "Settings"
-       "settings.json"
-       get-settings-chan
-       set-settings-chan
-       error-chan
-       log-chan)
+      "Settings"
+      "settings.json"
+      get-settings-chan
+      set-settings-chan
+      error-chan
+      log-chan)
+
+     (publish-data
+      "Thingspeak"
+      "thingspeak-api-key"
+      tesla-current-state-chan
+      home-current-data-chan
+      error-chan
+      log-chan)
 
      (process-sms-messages
       "SMS"
-      "username"
-      "api-key"
+      "clicksend-username"
+      "clicksend-password"
       [(sms-processors/->SetTargetPercent set-settings-chan get-settings-chan tesla tesla-current-state-chan solar-sites)
        (sms-processors/->SetPowerBuffer set-settings-chan get-settings-chan tesla tesla-current-state-chan solar-sites)
-       (sms-processors/->SetTargetTime set-settings-chan get-settings-chan tesla tesla-current-state-chan solar-sites)]
+       (sms-processors/->SetTargetTime set-settings-chan get-settings-chan tesla tesla-current-state-chan solar-sites)
+       (sms-processors/->SetMaxClimb set-settings-chan get-settings-chan tesla tesla-current-state-chan solar-sites)
+       (sms-processors/->SetMaxDrop set-settings-chan get-settings-chan tesla tesla-current-state-chan solar-sites)]
       error-chan
       log-chan)
 
@@ -120,11 +147,11 @@
       log-chan)
 
      (get-site-data
-      "Data (Work)"
-      work-site
-      work-new-data-chan
-      error-chan
-      log-chan)
+        "Data (Work)"
+        work-site
+        work-new-data-chan
+        error-chan
+        log-chan)
 
      (provide-current-channel-value
       work-new-data-chan
