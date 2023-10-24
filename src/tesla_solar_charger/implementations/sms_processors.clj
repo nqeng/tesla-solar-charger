@@ -42,6 +42,8 @@
        :else
        true)
       (catch NumberFormatException e
+        false)
+      (catch NullPointerException e
         false))))
 
 (defrecord SetTargetTimeAndPercent [set-settings-chan get-settings-chan car car-state-chan solar-sites]
@@ -89,6 +91,8 @@
       (catch NumberFormatException e
         false)
       (catch java.time.DateTimeException e
+        false)
+      (catch NullPointerException e
         false))))
 
 (defrecord SetTargetTime [set-settings-chan get-settings-chan car car-state-chan solar-sites]
@@ -134,6 +138,8 @@
       (catch NumberFormatException e
         false)
       (catch java.time.DateTimeException e
+        false)
+      (catch NullPointerException e
         false))))
 
 
