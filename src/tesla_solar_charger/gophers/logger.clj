@@ -43,7 +43,7 @@
           (when (nil? message)
             (throw (ex-info "Channel closed!" {})))
           (if (string? message)
-            (log log-level :info message)
+            (log log-level :info nil message)
             (log log-level (:level message) (:prefix message) (:message message))))
         (recur))
       (catch clojure.lang.ExceptionInfo e
