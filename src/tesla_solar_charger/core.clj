@@ -148,8 +148,7 @@
            true)
           (catch NumberFormatException e
             false)
-          (catch java.time.DateTimeException e
-            false)))]
+          ))]
 
      error-chan
      log-chan)
