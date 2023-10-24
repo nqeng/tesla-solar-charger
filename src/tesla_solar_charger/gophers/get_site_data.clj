@@ -26,9 +26,7 @@
                                     :prefix log-prefix
                                     :message (format "Sleeping until %s"
                                                      (utils/format-time "yyyy-MM-dd HH:mm:ss" next-data-available-time))})
-                (async/>! log-chan {:level :info
-                                    :prefix log-prefix
-                                    :message "..."})
+
                 (Thread/sleep (utils/millis-between-times (java.time.LocalDateTime/now) next-data-available-time)))))
           (catch clojure.lang.ExceptionInfo e
             (case (:type (ex-data e))
