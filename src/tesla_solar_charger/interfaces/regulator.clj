@@ -86,7 +86,6 @@
   (set-first-successful-regulation [regulator regulation])
   (set-last-successful-regulation [regulator regulation])
   (set-last-attempted-regulation [regulator regulation])
-  (with-regulation-creater [regulator regulation-creater])
   (regulate [regulator car-state site-data log-chan log-prefix]))
 
 (defprotocol RegulationCreater

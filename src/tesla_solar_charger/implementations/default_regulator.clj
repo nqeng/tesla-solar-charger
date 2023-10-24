@@ -2,7 +2,7 @@
   (:require
    [tesla-solar-charger.interfaces.regulator :as regulator]))
 
-(defrecord DefaultRegulator [car site]
+(defrecord DefaultRegulator [car site regulation-creater]
 
   regulator/Regulator
 
@@ -17,12 +17,8 @@
     (assoc regulator :last-attempted-regulation regulation))
   (set-last-successful-regulation [regulator regulation]
     (assoc regulator :last-successful-regulation regulation))
-  (with-regulation-creater [regulator regulation-creater]
-    (assoc regulator :regulation-creater regulation-creater))
   (regulate [regulator car-state site-data log-chan log-prefix]
-    (when (nil? (:regulation-creater regulator))
-      (throw (java.lang.IllegalStateException "No regulation creater present")))
-    (let [regulation (-> (:regulation-creater regulator)
+    (let [regulation (-> regulation-creater
                          (regulator/create-regulation regulator car-state site-data))
           regulator (-> regulation
                         (regulator/apply-regulation regulator log-chan log-prefix))]
