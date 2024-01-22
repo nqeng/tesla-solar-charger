@@ -4,7 +4,7 @@
    [tesla-solar-charger.interfaces.site :as site]
    [tesla-solar-charger.interfaces.car :as car]))
 
-(defn log-to-thingspeak
+#_(defn log-to-thingspeak
   [& data]
   (let [field-names (take-nth 2 data)
         field-values (take-nth 2 (rest data))
@@ -24,7 +24,7 @@
                   (str "Failed to get Tesla state; " error)
                   {:type :network-error})))))))
 
-(defrecord ThingspeakRecorder [api-key]
+#_(defrecord ThingspeakRecorder [api-key]
 
   recorder/Recorder
 
@@ -34,7 +34,7 @@
          (.isBefore (java.time.Instant/now) (:next-record-time recorder)))
       recorder
       (let [field1 (site/get-excess-power-watts site-data)
-            field2 (car/get-charge-rate-amps car-state)
+            field2 (car/get-charge-current-amps car-state)
             field3 0
             field4 0]
         (try

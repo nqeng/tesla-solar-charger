@@ -12,6 +12,7 @@
                  [org.clojure/data.priority-map "1.1.0"]
                  [org.clojure/core.async "1.6.681"]
                  [better-cond "2.1.5"]
+                 [etaoin "1.0.40"]
                  ]
   :main ^:skip-aot tesla-solar-charger.core
   :target-path "target/%s"

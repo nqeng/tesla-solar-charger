@@ -51,7 +51,7 @@
               (async/>! log-chan {:level :info
                                   :prefix log-prefix
                                   :message (format "Sleeping until %s"
-                                                   (utils/format-time "yyyy-MM-dd HH:mm:ss" next-state-available-time))})
+                                                   (utils/format-time next-state-available-time))})
               (Thread/sleep (utils/millis-between-times (java.time.LocalDateTime/now) next-state-available-time))))
           (recur)))
       (catch clojure.lang.ExceptionInfo e

@@ -1,9 +1,4 @@
-(ns tesla-solar-charger.interfaces.regulator
-  (:require
-   [tesla-solar-charger.interfaces.car :as car]
-   [clojure.core.async :as async]
-   [tesla-solar-charger.interfaces.site :as site]
-   [tesla-solar-charger.utils :as utils]))
+(ns tesla-solar-charger.interfaces.regulator)
 
 (declare Regulator)
 (declare Regulation)
@@ -16,66 +11,20 @@
 (defprotocol Regulation
   (get-car-state [regulation])
   (get-site-data [regulation])
-  (get-charge-rate-amps [regulation])
-  (get-charge-limit-percent [regulation])
+  (get-car-state-to-restore [regulation])
   (used-solar-data? [regulation])
+  (used-this-solar-data? [regulation this-site-data])
   (did-car-start-charging? [regulation])
   (did-car-stop-charging? [regulation])
   (set-used-solar-data [regulation used-solar-data?])
   (set-did-car-start-charging [regulation did-car-start-charging?])
   (set-did-car-stop-charging [regulation did-car-stop-charging?])
   (set-charge-rate-amps [regulation charge-rate-amps])
-  (set-charge-limit-percent [regulation charge-limit-percent])
-  (add-message [regulation message])
-  (get-messages [regulation])
-  (apply-regulation [regulation car log-chan log-prefix]))
-
-(defrecord ChargeRateRegulation [car-state site-data]
-
-  Regulation
-
-  (get-car-state [regulation] car-state)
-  (get-site-data [regulation] site-data)
-  (get-charge-rate-amps [regulation] (:charge-rate-amps regulation))
-  (get-charge-limit-percent [regulation] (:charge-limit-percent regulation))
-  (used-solar-data? [regulation] (:used-solar-data? regulation))
-  (did-car-start-charging? [regulation] (:did-car-start-charging? regulation))
-  (did-car-stop-charging? [regulation] (:did-car-stop-charging? regulation))
-  (set-used-solar-data [regulation used-solar-data?]
-    (assoc regulation :used-solar-data? used-solar-data?))
-  (set-did-car-start-charging [regulation did-car-start-charging?]
-    (assoc regulation :did-car-start-charging? did-car-start-charging?))
-  (set-did-car-stop-charging [regulation did-car-stop-charging?]
-    (assoc regulation :did-car-stop-charging? did-car-stop-charging?))
-  (set-charge-rate-amps [regulation charge-rate-amps]
-    (assoc regulation :charge-rate-amps charge-rate-amps))
-  (set-charge-limit-percent [regulation charge-limit-percent]
-    (assoc regulation :charge-limit-percent charge-limit-percent))
-  (add-message [regulation message]
-    (update regulation :messages #(vec (conj % message))))
-  (get-messages [regulation] (:messages regulation))
-  (apply-regulation [regulation regulator log-chan log-prefix]
-    (let [car (get-car regulator)
-          site (get-site regulator)
-          regulator (set-last-attempted-regulation regulator regulation)]
-      (try
-        (doseq [message (get-messages regulation)] (async/>!! log-chan {:level :info :prefix log-prefix :message message}))
-        (when (some? (get-charge-rate-amps regulation))
-          (car/set-charge-rate car (get-charge-rate-amps regulation))
-          (async/>!! log-chan {:level :info :prefix log-prefix :message (format "Set charge rate to %sA" (get-charge-rate-amps regulation))}))
-        (let [regulator (set-last-successful-regulation regulator regulation)
-              regulator (if (did-car-start-charging? regulation)
-                          (set-first-successful-regulation regulator regulation)
-                          regulator)
-              regulator (if (did-car-stop-charging? regulation)
-                          (set-first-successful-regulation regulator nil)
-                          regulator)]
-          regulator)
-
-        (catch clojure.lang.ExceptionInfo e
-          (throw e))
-        (catch Exception e
-          (throw e))))))
+  (set-car-state-to-restore [regulation car-state])
+  (set-status-message [regulation message])
+  (get-status-message [regulation])
+  (log-status-message [regulation])
+  (apply-this [regulation car site]))
 
 (defprotocol Regulator
   (get-site [regulator])
@@ -87,8 +36,19 @@
   (set-last-successful-regulation [regulator regulation])
   (set-last-attempted-regulation [regulator regulation])
   (with-regulation-creater [regulator regulation-creater])
-  (regulate [regulator car-state site-data log-chan log-prefix]))
+  (get-regulation-creater [regulator])
+  (create-regulation [regulator])
+  (apply-regulation [regulator regulation])
+  (regulate [regulator car-state site-data]))
 
 (defprotocol RegulationCreater
-  (create-regulation [regulation-creater regulator car-state site-data]))
+  (create-regulation [regulation-creater
+                      car
+                      site
+                      car-state
+                      site-data
+                      first-successful-regulation
+                      last-successful-regulation
+                      last-attempted-regulation
+                      settings]))
 

@@ -19,7 +19,7 @@
        :let [body (get sms "body")
              match (re-find #"^\s*[bB]uffer\s+(\d+)\s*$" body)
              power-buffer-watts (Float/parseFloat (get match 1))
-             power-buffer-watts (utils/limit power-buffer-watts 0 99999)]
+             power-buffer-watts (utils/clamp-min-max power-buffer-watts 0 99999)]
 
        :let [car-state (async/<!! car-state-chan)]
 
@@ -57,7 +57,7 @@
        :let [body (get sms "body")
              match (re-find #"^\s*[pP]ercent\s+(\d\d?\d?)\s*$" body)
              target-percent (Integer/parseInt (get match 1))
-             target-percent (utils/limit target-percent 0 100)]
+             target-percent (utils/clamp-min-max target-percent 0 100)]
 
        :let [car1-state (async/<!! car-state-chan)]
 

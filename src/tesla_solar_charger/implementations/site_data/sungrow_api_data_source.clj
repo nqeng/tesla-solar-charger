@@ -1,12 +1,14 @@
-(ns tesla-solar-charger.implementations.sungrow-site
+(ns tesla-solar-charger.implementations.site-data.sungrow-api-data-source
   (:require
-   [clj-http.client :as client]
+   [tesla-solar-charger.utils :as utils]
+   [clojure.string :as s]
    [cheshire.core :as json]
-   [clojure.string :as str]
-   [tesla-solar-charger.interfaces.car :as car]
+   [clj-http.client :as client]
    [better-cond.core :refer [cond] :rename {cond better-cond}]
-   [tesla-solar-charger.interfaces.site :as site]
-   [tesla-solar-charger.utils :as utils]))
+   [tesla-solar-charger.implementations.site-data.sungrow-site-data :refer [new-SungrowSiteData]]
+   [tesla-solar-charger.interfaces.site :as Isite]
+   [tesla-solar-charger.interfaces.site-data :as Isite-data]
+   ))
 
 (defn create-data-point-timestamp
   "15/05/2023:14:00:00 => 20230515140000"
@@ -121,8 +123,8 @@
                                    :start_time_stamp (get-latest-data-timestamp start-time data-interval-minutes)
                                    :end_time_stamp (get-latest-data-timestamp end-time data-interval-minutes)
                                    :minute_interval data-interval-minutes
-                                   :ps_key (str/join "," ps-keys)
-                                   :points (str/join "," points)}
+                                   :ps_key (s/join "," ps-keys)
+                                   :points (s/join "," points)}
                      :content-type :json})
 
           json (json/parse-string (:body response))
@@ -159,58 +161,38 @@
                 (str "Network error; " error)
                 {:type :network-error}))))))
 
-(defn euclidean-distance
-  [x1 y1 x2 y2]
-  (Math/sqrt (+ (Math/pow (- x2 x1) 2) (Math/pow (- y2 y1) 2))))
+(defrecord SungrowAPIDataSource []
 
-(defrecord SungrowSiteData []
+  Isite-data/SiteDataSource
 
-  site/SiteData
+  (get-data [data-source request]
 
-  (add-point [data point] (update data :points #(vec (conj % point))))
-  (get-points [data] (:points data)))
+    (when (nil? (:start-time request))
+      (throw (java.lang.IllegalArgumentException. "Null start time")))
 
-(defrecord SungrowSiteDataPoint [time excess-power-watts]
+    (when (nil? (:end-time request))
+      (throw (java.lang.IllegalArgumentException. "Null end time")))
 
-  site/SiteDataPoint
-
-  (get-time [point] (get point :time))
-  (get-excess-power-watts [point] (get point :excess-power-watts)))
-
-(defrecord SungrowSite [id name latitude longitude username password api-key data-interval-minutes values]
-
-  site/Site
-
-  (get-name [site] name)
-  (get-id [site] id)
-  (is-car-here? [site car-state]
-    (< (euclidean-distance
-        (car/get-latitude car-state)
-        (car/get-longitude car-state)
-        latitude
-        longitude) 0.0005))
-
-  (power-watts-to-current-amps [site power-watts] (/ power-watts 687.5))
-
-  (get-data [site request]
     (try
       (better-cond
-       (nil? (:start-time request))
-       nil
+       :let [username (:username data-source)
+             password (:password data-source)
+             app-key (:app-key data-source)
+             start-time (:start-time request)
+             end-time (:end-time request)
+             data-interval-minutes (:data-interval-minutes data-source)
+             values (:values data-source)]
 
-       (nil? (:end-time request))
-       nil
-
-       :let [sungrow-token (if (some? (:sungrow-token site))
-                             (:sungrow-token site)
-                             (login username password api-key))]
+       :let [sungrow-token (if-some [sungrow-token (:sungrow-token data-source)]
+                             sungrow-token
+                             (login username password app-key))]
 
        :let [data (try
                     (apply get-data
                            sungrow-token
-                           (:start-time request)
-                           (:end-time request)
-                           api-key
+                           start-time
+                           end-time
+                           app-key
                            data-interval-minutes
                            (map last values))
                     (catch clojure.lang.ExceptionInfo e
@@ -218,12 +200,13 @@
                         :err-sungrow-auth-failed
                         (try
                           (apply get-data
-                                 (login username password api-key)
-                                 (:start-time request)
-                                 (:end-time request)
-                                 api-key
+                                 (login username password app-key)
+                                 start-time
+                                 end-time
+                                 app-key
                                  data-interval-minutes
                                  (map last values))
+
                           (catch clojure.lang.ExceptionInfo e
                             (throw e))
                           (catch Exception e
@@ -246,27 +229,30 @@
        :let [next-data-available-time (if (nil? excess-power)
                                         (.plusSeconds time 60)
                                         (.plusSeconds (get-next-data-publish-time time data-interval-minutes) 60))]
-       :let [site (assoc site :next-data-available-time next-data-available-time)]
+       :let [data-source (assoc data-source :next-data-available-time next-data-available-time)]
 
-       :let [data (-> (->SungrowSiteData)
-                      (site/add-point (->SungrowSiteDataPoint time excess-power)))]
+       :let [data (new-SungrowSiteData)]
 
-       [site data])
+       :let [data (if (some? excess-power)
+                    (-> data
+                        (Isite-data/add-point time excess-power))
+                    data)]
+
+       [data-source data])
       (catch clojure.lang.ExceptionInfo e
         (throw e))
       (catch Exception e
-        (throw e)))))
+        (throw e))))
+  (when-next-data-ready? [data-source] (:next-data-available-time data-source)))
 
-(comment
-  (let [site (->SungrowSite
-              "North Queensland Engineering"
-              -19.291017028657112
-              146.79517661638516
-              "reuben@nqeng.com.au"
-              "sungrownqe123"
-              "93D72E60331ABDCDC7B39ADC2D1F32B3"
-              5
-              {:excess-power-watts ["1152381_7_2_3" "p8018"]})]
-    (site/get-data site {:start-time (utils/time-now) :end-time (utils/time-now)})))
+(defn new-SungrowAPIDataSource
+  [username password app-key data-interval-minutes values]
+  (let [the-map {:username username
+                 :password password
+                 :app-key app-key
+                 :data-interval-minutes data-interval-minutes
+                 :values values}
+        defaults {:next-data-available-time (utils/time-now)}]
+    (map->SungrowAPIDataSource (merge defaults the-map))))
 
 

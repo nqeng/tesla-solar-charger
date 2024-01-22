@@ -2,7 +2,7 @@
   (:require
    [clojure.core.async :as async]))
 
-(defn publish-data
+#_(defn publish-data
   [tesla->state->logger solar->data->logger log-chan previous-car-state previous-solar-site]
   (let [result nil]
     (try
@@ -38,7 +38,7 @@
       (catch Exception e
         (throw e)))))
 
-(defn publish-data-loop
+#_(defn publish-data-loop
   [tesla->state->logger solar->data->logger log-chan error-chan]
   (try
     (loop [last-result nil

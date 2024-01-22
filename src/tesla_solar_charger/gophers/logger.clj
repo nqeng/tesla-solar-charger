@@ -25,7 +25,7 @@
   (let [permitted-levels (get log-levels log-level)]
     (when (contains? permitted-levels message-level)
       (let [time (utils/time-now)
-            log-timestamp (utils/format-time "yyyy-MM-dd HH:mm:ss" time)
+            log-timestamp (utils/format-time time)
             prefix (if (some? prefix) prefix "Misc")
             log-message (format "[%s] [%s] %s" log-timestamp prefix (s/join "\n" args))
             log-file-path (make-log-file-path time)]
