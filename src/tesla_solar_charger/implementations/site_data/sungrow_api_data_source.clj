@@ -10,6 +10,13 @@
    [tesla-solar-charger.interfaces.site-data :as Isite-data]
    ))
 
+(def power-to-current-3-phase 687.5)
+(def power-to-current-3-phase-delta 262.5)
+(def power-to-current-1-phase 231.25)
+(def power-to-current-2-phase 462.5)
+(def data-interval-minutes 5)
+(def sungrow-api-key "93D72E60331ABDCDC7B39ADC2D1F32B3")
+
 (defn create-data-point-timestamp
   "15/05/2023:14:00:00 => 20230515140000"
   [datetime]
@@ -173,6 +180,27 @@
     (when (nil? (:end-time request))
       (throw (java.lang.IllegalArgumentException. "Null end time")))
 
+  site/SiteDataPoint
+
+  (get-time [point] (get point :time))
+  (get-excess-power-watts [point] (get point :excess-power-watts)))
+
+(defrecord SungrowSite [id name latitude longitude username password values power-to-current-factor]
+
+  site/Site
+
+  (get-name [site] name)
+  (get-id [site] id)
+  (is-car-here? [site car-state]
+    (< (euclidean-distance
+        (car/get-latitude car-state)
+        (car/get-longitude car-state)
+        latitude
+        longitude) 0.0005))
+
+  (power-watts-to-current-amps [site power-watts] (/ power-watts power-to-current-factor))
+
+  (get-data [site request]
     (try
       (better-cond
        :let [username (:username data-source)
@@ -210,7 +238,10 @@
                           (catch clojure.lang.ExceptionInfo e
                             (throw e))
                           (catch Exception e
-                            (throw e)))))
+                            (throw e)))
+
+                        (throw e)
+                        ))
                     (catch Exception e
                       (throw e)))]
 

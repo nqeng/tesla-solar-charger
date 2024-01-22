@@ -56,8 +56,7 @@
 
    :let [log-level (-> options
                        :options
-                       :log-level
-                       keyword)]
+                       :log-level)]
 
    :do (reset! log/log-level log-level)
    :do (log/info "Starting...")

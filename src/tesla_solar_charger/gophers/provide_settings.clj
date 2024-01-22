@@ -21,7 +21,9 @@
                           (json/parse-string (slurp settings-filename))
                           (catch Exception e
                             default-settings)))]
-        (async/>! log-chan {:level :info :prefix log-prefix :message "..."})
+        (async/>! log-chan {:level :verbose 
+                            :prefix log-prefix 
+                            :message "..."})
         (let [[value chan] (async/alts! [[get-chan settings] set-chan])]
           (if (= get-chan chan)
             (let [success value]
