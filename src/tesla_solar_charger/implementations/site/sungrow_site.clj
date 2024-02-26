@@ -113,12 +113,12 @@
       [site data])))
 
 (defn new-SungrowSite
-  [id name {latitude :lat longitude :lng} range-meters]
+  [id name {latitude :lat longitude :lng} detection-range-meters]
   (let [the-map {:id id
                  :name name
                  :latitude latitude
                  :longitude longitude
-                 :range-meters range-meters}
+                 :range-meters detection-range-meters}
         defaults {:data-source nil}
         site (map->SungrowSite (merge defaults the-map))]
     site))

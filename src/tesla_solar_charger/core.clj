@@ -14,38 +14,19 @@
    [clojure.core.async :as async]
    [tesla-solar-charger.interfaces.site :as Isite]))
 
-#_(def solar-sites
-    [(sungrow-site/->SungrowSite
-      "site1"
-      "NQE"
-      -19.291005960166686
-      146.7951968375124
-      "reuben@nqeng.com.au"
-      "sungrownqe123"
-      "93D72E60331ABDCDC7B39ADC2D1F32B3"
-      5
-      {:excess-power-watts ["1152381_7_2_3" "p8018"]})
-     (sungrow-site/->SungrowSite
-      "site2"
-      ""
-      0
-      0
-      ""
-      ""
-      ""
-      5
-      {})])
-
 (def cli-options
   ;; An option with a required argument
   [["-l" "--log-level" "Log level"
-    :default "verbose"
-    :validate [#(contains? #{"info" "verbose" "error"} %) "Must be one of: (info, verbose, error)"]]
+    :default log/default-log-level
+    :parse-fn keyword
+    :validate [#(contains? #{:info :verbose :error} %) "Must be one of: (info, verbose, error)"]]
    ["-h" "--help"]])
 
 (defn -main
   [& args]
   (better-cond
+
+    :do (println "Starting...")
 
    :let [options (parse-opts args cli-options)
          errors (:errors options)]
@@ -56,12 +37,14 @@
 
    :let [log-level (-> options
                        :options
-                       :log-level)]
+                       :log-level
+                       )]
 
-   :do (reset! log/log-level log-level)
+   :do (println log-level)
+   :do (log/set-log-level log-level)
    :do (log/info "Starting...")
 
-   (let [error-ch (async/chan (async/dropping-buffer 1))
+   #_(let [error-ch (async/chan (async/dropping-buffer 1))
          kill-ch (async/chan)
          car1 (new-Tesla "LRW3F7EKXPC780478" "P85JQZRL97qQ4KO6jVfODJnrIoSYUKtU")
          site-data-source1 (new-SungrowLiveDataSource
@@ -70,10 +53,11 @@
                             "reuben@nqeng.com.au"
                             "sungrownqe123"
                             "North Queensland Engineering")
-         site1 (-> (new-SungrowSite "" "" 0 0 50)
+         site1-location {:lat 0 :lng 0}
+         site1 (-> (new-SungrowSite "nqe" "NQE Office" site1-location 50)
                    (Isite/with-data-source site-data-source1))
          new-car-state (get-new-car-state "" car1 error-ch kill-ch)
-         new-site-data (get-new-site-data "" site1 error-ch kill-ch)]
+         new-site-data 0 #_(get-new-site-data "" site1 error-ch kill-ch)]
 
      (print-values "Received %s" new-car-state)
 ;     (print-values "Receieved %s" new-site-data)
