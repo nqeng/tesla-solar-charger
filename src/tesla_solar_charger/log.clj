@@ -32,10 +32,8 @@
 
 (defn log
   ([message-level prefix message]
-   (println message-level)
    (let [permitted-levels (get log-levels (deref log-level))]
      (when (contains? permitted-levels message-level)
-       (println "Log message got through")
        (let [time (utils/time-now)
              log-timestamp (utils/format-time time)
              prefix (if (some? prefix) prefix "Misc")

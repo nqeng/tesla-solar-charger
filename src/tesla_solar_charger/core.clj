@@ -26,8 +26,6 @@
   [& args]
   (better-cond
 
-    :do (println "Starting...")
-
    :let [options (parse-opts args cli-options)
          errors (:errors options)]
 
@@ -37,94 +35,92 @@
 
    :let [log-level (-> options
                        :options
-                       :log-level
-                       )]
+                       :log-level)]
 
-   :do (println log-level)
    :do (log/set-log-level log-level)
    :do (log/info "Starting...")
 
-   #_(let [error-ch (async/chan (async/dropping-buffer 1))
-         kill-ch (async/chan)
-         car1 (new-Tesla "LRW3F7EKXPC780478" "P85JQZRL97qQ4KO6jVfODJnrIoSYUKtU")
-         site-data-source1 (new-SungrowLiveDataSource
-                            :firefox
-                            {:headless true}
-                            "reuben@nqeng.com.au"
-                            "sungrownqe123"
-                            "North Queensland Engineering")
-         site1-location {:lat 0 :lng 0}
-         site1 (-> (new-SungrowSite "nqe" "NQE Office" site1-location 50)
-                   (Isite/with-data-source site-data-source1))
-         new-car-state (get-new-car-state "" car1 error-ch kill-ch)
-         new-site-data 0 #_(get-new-site-data "" site1 error-ch kill-ch)]
+   (let [error-ch (async/chan (async/dropping-buffer 1))
+           kill-ch (async/chan)
+           car1 (new-Tesla "LRW3F7EKXPC780478" "P85JQZRL97qQ4KO6jVfODJnrIoSYUKtU")
+           site-data-source1 (new-SungrowLiveDataSource
+                              :firefox
+                              {:headless true}
+                              "reuben@nqeng.com.au"
+                              "sungrownqe123"
+                              "North Queensland Engineering")
+           site1-location {:lat 0 :lng 0}
+           site1 (-> (new-SungrowSite "nqe" "NQE Office" site1-location 50)
+                     (Isite/with-data-source site-data-source1))
+           new-car-state (get-new-car-state "" car1 error-ch kill-ch)
+           new-site-data 0 #_(get-new-site-data "" site1 error-ch kill-ch)]
 
-     (print-values "Received %s" new-car-state)
+       (print-values "Received %s" new-car-state)
 ;     (print-values "Receieved %s" new-site-data)
 
-     #_(log-loop log-level log-chan error-chan)
+       #_(log-loop log-level log-chan error-chan)
 
-     #_(process-sms-messages
-        "Process SMS"
-        "caleb@nqeng.com.au"
-        "C4E6DC42-D5C4-5082-F79B-88D3D7E2FDCD"
-        [(sms-processors/->SetTargetPercent set-settings-chan get-settings-chan car1 current-car1-state-chan solar-sites)
-         (sms-processors/->SetPowerBuffer set-settings-chan get-settings-chan car1 current-car1-state-chan solar-sites)
-         (sms-processors/->SetTargetTime set-settings-chan get-settings-chan car1 current-car1-state-chan solar-sites)]
-        error-chan
-        log-chan)
+       #_(process-sms-messages
+          "Process SMS"
+          "caleb@nqeng.com.au"
+          "C4E6DC42-D5C4-5082-F79B-88D3D7E2FDCD"
+          [(sms-processors/->SetTargetPercent set-settings-chan get-settings-chan car1 current-car1-state-chan solar-sites)
+           (sms-processors/->SetPowerBuffer set-settings-chan get-settings-chan car1 current-car1-state-chan solar-sites)
+           (sms-processors/->SetTargetTime set-settings-chan get-settings-chan car1 current-car1-state-chan solar-sites)]
+          error-chan
+          log-chan)
 
-     #_(provide-settings
-        ""
-        ""
-        get-settings-chan
-        set-settings-chan
-        error-ch
-        log-ch)
+       #_(provide-settings
+          ""
+          ""
+          get-settings-chan
+          set-settings-chan
+          error-ch
+          log-ch)
 
-     #_(split-channel
-        new-car1-state-chan
-        [new-car1-state-chan-split1 new-car1-state-chan-split2 new-car1-state-chan-split3]
-        error-chan
-        log-chan)
+       #_(split-channel
+          new-car1-state-chan
+          [new-car1-state-chan-split1 new-car1-state-chan-split2 new-car1-state-chan-split3]
+          error-chan
+          log-chan)
 
-     #_(provide-current-channel-value
-        new-car1-state-chan-split3
-        current-car1-state-chan
-        error-chan
-        log-chan)
+       #_(provide-current-channel-value
+          new-car1-state-chan-split3
+          current-car1-state-chan
+          error-chan
+          log-chan)
 
-     #_(get-site-data
-        ""
-        (first solar-sites)
-        new-site1-data-chan
-        error-chan
-        log-chan)
+       #_(get-site-data
+          ""
+          (first solar-sites)
+          new-site1-data-chan
+          error-chan
+          log-chan)
 
-     #_(provide-current-channel-value
-        new-site1-data-chan
-        current-site1-data-chan
-        error-chan
-        log-chan)
+       #_(provide-current-channel-value
+          new-site1-data-chan
+          current-site1-data-chan
+          error-chan
+          log-chan)
 
-     #_(regulate-charge-rate
-        ""
-        (-> (default-regulator/->DefaultRegulator car1 (second solar-sites))
-            (regulator/with-regulation-creater (target-time-regulation-creater/->TargetTimeRegulationCreater get-settings-chan)))
-        new-car1-state-chan-split1
-        current-site2-data-chan
-        error-chan
-        log-chan)
+       #_(regulate-charge-rate
+          ""
+          (-> (default-regulator/->DefaultRegulator car1 (second solar-sites))
+              (regulator/with-regulation-creater (target-time-regulation-creater/->TargetTimeRegulationCreater get-settings-chan)))
+          new-car1-state-chan-split1
+          current-site2-data-chan
+          error-chan
+          log-chan)
 
-     #_(.addShutdownHook
-        (Runtime/getRuntime)
-        (Thread.
-         (fn []
-           (doseq [chan []]
-             (async/close! chan)))))
+       #_(.addShutdownHook
+          (Runtime/getRuntime)
+          (Thread.
+           (fn []
+             (doseq [chan []]
+               (async/close! chan)))))
 
-     (when-some [error (async/<!! error-ch)]
-       (let [stack-trace-string (with-out-str (clojure.stacktrace/print-stack-trace error))]
-         (log/error stack-trace-string)
-         (log/notify stack-trace-string))))))
+       (when-some [error (async/<!! error-ch)]
+         (let [stack-trace-string (with-out-str (clojure.stacktrace/print-stack-trace error))]
+           (log/error stack-trace-string)
+           (log/notify stack-trace-string))))))
 
