@@ -6,12 +6,6 @@
    [clojure.core.async :as async]
    [tesla-solar-charger.utils :as utils]))
 
-(defn whichever-car-state-is-newer
-  [car-state1 car-state2]
-  (if (Icar/is-newer? car-state1 car-state2)
-    car-state1
-    car-state2))
-
 (defn run
   [state]
   (let [car (:car state)
@@ -20,7 +14,9 @@
       (let [next-run-at (utils/time-after-seconds 10)
             [car car-state] (Icar/get-state car)
             state (assoc state :car car)
-            next-car-state (whichever-car-state-is-newer car-state last-car-state)
+            next-car-state (if (Icar/is-newer? car-state last-car-state)
+                             car-state
+                             last-car-state)
             value-to-output (if (Icar/is-newer? car-state last-car-state)
                               car-state
                               nil)
@@ -44,22 +40,23 @@
 
 (defn get-new-car-state
   [log-prefix car error-ch kill-ch]
-  (let [output-ch (async/chan)]
+  (let [output-ch (async/chan)
+        state (-> state
+                  (assoc :car car))]
     (async/go
       (try
-        (loop [state (-> state
-                         (assoc :car car))]
+        (loop [state state]
           (let [[_ ch] (async/alts! [kill-ch (async/timeout 0)])]
             (when-not (= ch kill-ch)
-              (let [[new-state value should-continue next-run-at] (run state)]
+              (let [[new-state value should-continue next-run-time] (run state)]
                 (when (some? value)
                   (if-let [success (async/>! output-ch value)]
                     (log/verbose "value -> channel")
                     (throw utils/output-channel-closed)))
                 (when should-continue
-                  (when (some? next-run-at)
-                    (log/verbose (format "Sleeping until %s" (utils/format-time next-run-at)))
-                    (utils/sleep-until next-run-at))
+                  (when (some? next-run-time)
+                    (log/verbose (format "Sleeping until %s" (utils/format-time next-run-time)))
+                    (utils/sleep-until next-run-time))
                   (recur new-state))))))
         (catch clojure.lang.ExceptionInfo e
           (async/>! error-ch e))
