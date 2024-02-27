@@ -89,8 +89,12 @@
     (map->SungrowLiveDataSource (merge the-map defaults))))
 
 (comment
-  (let [data-source (new-SungrowLiveDataSource :firefox {:headless true} "reuben@nqeng.com.au" "sungrownqe123" "North Queensland Engineering")
-        [data-source data] (Isite/get-data data-source nil)]
+  (let [driver (e/firefox)]
+    (e/go driver "https://au.isolarcloud.com")))
+
+(comment
+  (let [data-source (new-SungrowLiveDataSource :firefox {:headless false} "reuben@nqeng.com.au" "sungrownqe123" "North Queensland Engineering")
+        [data-source data] (Isite-data/get-data data-source nil)]
     (utils/print-this data)
     (printf "Next data point available at %s%n" (utils/format-time (Isite-data/when-next-data-ready? data-source)))))
 
