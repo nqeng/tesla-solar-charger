@@ -3,7 +3,10 @@
   (:require
    [dotenv :refer [env]]
    [tesla-solar-charger.tesla :as tesla]
-   [tesla-solar-charger.sungrow :as sungrow]))
+   [tesla-solar-charger.sungrow :as sungrow]
+   [clojure.java.io :refer [make-parents]])
+  (:import (java.time.format DateTimeFormatter)
+           (java.time LocalDateTime)))
 
 (defn sleep
   [millis]
@@ -34,15 +37,35 @@
 
 (defn time-now
   []
-  (java.time.LocalDateTime/now))
+  (LocalDateTime/now))
+
+(defn format-time
+  [time format-str]
+  (.format time (DateTimeFormatter/ofPattern format-str))
+  )
+
+(defn make-log-file-path
+  [time]
+  (let [year-folder (format-time time "yy")
+        month-folder (format-time time "MM")
+        log-file (format-time time "yy-MM-dd")
+        log-file-path (format "./logs/%s/%s/%s.log" 
+                              year-folder 
+                              month-folder 
+                              log-file)]
+    log-file-path))
 
 (defn log
   [& args]
-  (print (format "[%s] "
-                 (.format
-                  (time-now)
-                  (java.time.format.DateTimeFormatter/ofPattern "yyyy-MM-dd HH:mm:ss"))))
-  (apply println args))
+  (let [time (time-now)
+        log-timestamp (format-time time "yyyy-MM-dd HH:mm:ss")
+        log-message (format "[%s] %s" log-timestamp (apply println-str args))
+        log-file-path (make-log-file-path time)]
+    
+    (print log-message)
+    (make-parents log-file-path)
+    (spit log-file-path log-message :append true)
+    ))
 
 (defn limit
   [num min max]
