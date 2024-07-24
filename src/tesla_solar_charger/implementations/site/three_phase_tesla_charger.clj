@@ -44,12 +44,9 @@
         power-factor (get-power-factor charger)]
     (utils/power-watts-to-current-amps-three-phase watts three-phase-voltage-volts power-factor)))
 
-(defn convert-amps-to-watts [charger amps] 0)
-
 (defrecord TeslaChargerThreePhase []
 
-  Isite-charger/SiteCharger
-
+  Isite-charger/ICharger
   (set-car-charge-power [charger car power-watts]
     (let [current-amps (convert-watts-to-amps charger power-watts)
           result (Isite-charger/set-car-charge-current charger car current-amps)]
