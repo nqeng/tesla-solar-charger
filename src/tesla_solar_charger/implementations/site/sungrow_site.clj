@@ -45,47 +45,7 @@
 
       :else
       (and (not (Isite/is-car-charging-here? site current-car-state))
-           (Isite/is-car-charging-here? site previous-car-state))))
-  (did-car-connect-here? [site current-car-state previous-car-state]
-    (cond
-      (nil? current-car-state) false
-
-      (nil? previous-car-state) true
-
-      :else
-      (and (Isite/is-car-connected-here? site current-car-state)
-           (not (Isite/is-car-connected-here? site previous-car-state)))))
-  (did-car-disconnect-here? [site current-car-state previous-car-state]
-    (cond
-      (nil? previous-car-state) false
-
-      (nil? current-car-state) true
-
-      :else
-      (and (not (Isite/is-car-connected-here? site current-car-state))
-           (Isite/is-car-connected-here? site previous-car-state))))
-  (did-car-enter-here? [site current-car-state previous-car-state]
-    (cond
-      (nil? current-car-state) false
-
-      (nil? previous-car-state) true
-
-      :else
-      (and (Isite/is-car-here? site current-car-state)
-           (not (Isite/is-car-here? site previous-car-state)))))
-  (did-car-leave-here? [site current-car-state previous-car-state]
-    (cond
-      (nil? previous-car-state) false
-
-      (nil? current-car-state) true
-
-      :else
-      (and (not (Isite/is-car-here? site current-car-state))
-           (Isite/is-car-here? site previous-car-state))))
-  (get-latest-data-point [site]
-    (let [data-source (:data-source site)
-          data-point (Isite-data/get-latest-data-point data-source)]
-      data-point)))
+           (Isite/is-car-charging-here? site previous-car-state)))))
 
 (defn new-SungrowSite
   [id name latitude longitude detection-range-meters data-source]
