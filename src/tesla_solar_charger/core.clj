@@ -9,7 +9,7 @@
    [tesla-solar-charger.gophers.utils :refer [sliding-buffer keep-last-value print-values]]
    [tesla-solar-charger.implementations.car.tesla :refer [new-Tesla]]
    [tesla-solar-charger.implementations.site.sungrow-site :refer [new-SungrowSite]]
-   [tesla-solar-charger.implementations.site-data.sungrow-gosungrow-data-source :refer [new-SungrowGoSungrowDataSource]]
+   [tesla-solar-charger.implementations.site-data.gosungrow-data-source :refer [new-GoSungrowDataSource]]
    [tesla-solar-charger.implementations.site-data.sungrow-live-data-source :refer [new-SungrowLiveDataSource]]
    [tesla-solar-charger.gophers.get-site-data :refer [get-new-site-data]]
    [clojure.core.async :as async]
@@ -55,7 +55,7 @@
          error-ch (async/chan (async/dropping-buffer 1))
          kill-ch (async/chan)
          car1 (new-Tesla tesla-vin tessie-auth-token)
-         solar-data-source (new-SungrowGoSungrowDataSource
+         solar-data-source (new-GoSungrowDataSource
                             script-filepath
                             ps-key
                             ps-id

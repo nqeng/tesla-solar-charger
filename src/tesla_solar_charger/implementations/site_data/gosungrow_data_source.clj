@@ -1,4 +1,4 @@
-(ns tesla-solar-charger.implementations.site-data.sungrow-gosungrow-data-source
+(ns tesla-solar-charger.implementations.site-data.gosungrow-data-source
   (:require
    [cheshire.core :as json]
    [tesla-solar-charger.interfaces.site-data :as Isite-data]
@@ -62,7 +62,7 @@
                           last)]
     latest-point))
 
-(defrecord SungrowGoSungrowDataSource []
+(defrecord GoSungrowDataSource []
 
   Isite-data/SiteDataSource
 
@@ -74,12 +74,12 @@
           data-point (get-latest-data-point script-filepath ps-key ps-id excess-power-key)]
       data-point)))
 
-(defn new-SungrowGoSungrowDataSource
+(defn new-GoSungrowDataSource
   [script-filepath ps-key ps-id excess-power-key]
   (let [the-map {:script-filepath script-filepath
                  :ps-key ps-key
                  :ps-id ps-id
                  :excess-power-key excess-power-key}
         defaults {}]
-    (map->SungrowGoSungrowDataSource (merge defaults the-map))))
+    (map->GoSungrowDataSource (merge defaults the-map))))
 
