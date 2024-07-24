@@ -1,4 +1,4 @@
-(ns tesla-solar-charger.interfaces.site-data)
+(ns tesla-solar-charger.data-source.data-source)
 
 (defprotocol IDataSource
   (get-latest-data-point [data-source]))

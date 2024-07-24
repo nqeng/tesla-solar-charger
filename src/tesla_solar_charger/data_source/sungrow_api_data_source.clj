@@ -1,9 +1,9 @@
 (ns tesla-solar-charger.data-source.sungrow-api-data-source
   (:require
    [tesla-solar-charger.utils :as utils]
+   [tesla-solar-charger.data-source.data-source :as data-source]
    [cheshire.core :as json]
-   [clj-http.client :as client]
-   [tesla-solar-charger.interfaces.site-data :as site-data]))
+   [clj-http.client :as client]))
 
 (defn create-data-point-timestamp
   "15/05/2023:14:00:00 => 20230515140000"
@@ -158,7 +158,7 @@
 
 (defrecord SungrowAPIDataSource []
 
-  site-data/IDataSource
+  data-source/IDataSource
   (get-latest-data-point [data-source] (throw (ex-info "Not implemented" {}))))
 
 (defn new-SungrowAPIDataSource

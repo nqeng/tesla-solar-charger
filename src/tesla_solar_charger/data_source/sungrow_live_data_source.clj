@@ -2,7 +2,7 @@
   (:require
    [etaoin.api :as e]
    [etaoin.keys :as k]
-   [tesla-solar-charger.interfaces.site-data :as site-data]
+   [tesla-solar-charger.data-source.data-source :as data-source]
    [tesla-solar-charger.utils :as utils]))
 
 (defn parse-value-in-watts
@@ -46,7 +46,7 @@
 
 (defrecord SungrowLiveDataSource []
 
-  site-data/IDataSource
+  data-source/IDataSource
   (get-latest-data-point [data-source]
     (let [browser-type (:browser-type data-source)
           browser-options (:browser-options data-source)
@@ -59,7 +59,7 @@
                               username
                               password
                               plant-name)
-          data (site-data/make-data-point (utils/local-now) excess-power-watts)]
+          data (data-source/make-data-point (utils/local-now) excess-power-watts)]
       data)))
 
 (defn new-SungrowLiveDataSource

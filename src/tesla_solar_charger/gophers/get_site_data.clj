@@ -1,9 +1,13 @@
 (ns tesla-solar-charger.gophers.get-site-data
   (:require
    [tesla-solar-charger.log :as log]
-   [tesla-solar-charger.interfaces.site-data :as Isite-data]
+   [tesla-solar-charger.data-source.data-source :as data-source]
    [clojure.core.async :refer [>! alts! sliding-buffer chan go close!]]
    [tesla-solar-charger.utils :as utils]))
+
+(defn is-data-point-newer?
+  [data-point1 data-point2]
+  (.isAfter (:timestamp data-point1) (:timestamp data-point2)))
 
 (defn get-new-site-data
   [data-source error-ch kill-ch]
@@ -16,7 +20,7 @@
           (if (= ch kill-ch)
             (log/info log-prefix "Process dying...")
             (let [last-data-point (:last-data-point state)
-                  func (partial Isite-data/get-latest-data-point data-source)
+                  func (partial data-source/get-latest-data-point data-source)
                   [error data-point] (utils/try-return-error func)]
               (if (some? error)
                 (do
@@ -28,7 +32,7 @@
                   (log/verbose log-prefix (format "Last solar data: %s" last-data-point))
                   (log/info log-prefix (format "New solar data:  %s" data-point))
                   (if (and (some? last-data-point)
-                           (not (Isite-data/is-newer? data-point last-data-point)))
+                           (not (is-data-point-newer? data-point last-data-point)))
                     (do
                       (log/verbose log-prefix "No new site data")
                       (log/verbose log-prefix "Sleeping for 30s")
