@@ -1,7 +1,7 @@
 (ns tesla-solar-charger.gophers.set-charge-rate
   (:require
    [tesla-solar-charger.log :as log]
-   [tesla-solar-charger.interfaces.charger :as charger]
+   [tesla-solar-charger.charger.charger :as charger]
    [clojure.core.async :refer [sliding-buffer chan close! <! >! go alts!]]))
 
 (defn set-charge-rate

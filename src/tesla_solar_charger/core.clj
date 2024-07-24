@@ -6,7 +6,7 @@
    [tesla-solar-charger.gophers.get-car-state :refer [get-new-car-state]]
    [tesla-solar-charger.gophers.set-charge-rate :refer [set-charge-rate]]
    [better-cond.core :refer [cond] :rename {cond better-cond}]
-   [tesla-solar-charger.implementations.site.three-phase-tesla-charger :refer [new-TeslaChargerThreePhase]]
+   [tesla-solar-charger.charger.three-phase-tesla-charger :refer [new-TeslaChargerThreePhase]]
    [tesla-solar-charger.utils :as utils]
    [tesla-solar-charger.gophers.utils :refer [sliding-buffer keep-last-value print-values]]
    [tesla-solar-charger.car.tesla :refer [new-Tesla]]
