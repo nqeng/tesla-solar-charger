@@ -1,4 +1,4 @@
-(ns tesla-solar-charger.interfaces.car
+(ns tesla-solar-charger.car.car
   (:require
     [tesla-solar-charger.utils :refer [minutes-between-times]])
   )

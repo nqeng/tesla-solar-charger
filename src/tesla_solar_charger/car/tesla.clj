@@ -1,10 +1,9 @@
-(ns tesla-solar-charger.implementations.car.tesla
+(ns tesla-solar-charger.car.tesla
   (:require
    [clj-http.client :as client]
    [cheshire.core :as json]
-   [tesla-solar-charger.interfaces.site :as Isite]
    [tesla-solar-charger.utils :as utils]
-   [tesla-solar-charger.interfaces.car :as car]))
+   [tesla-solar-charger.car.car :as car]))
 
 (def power-to-current-3-phase 687.5)
 (def power-to-current-3-phase-delta 262.5)

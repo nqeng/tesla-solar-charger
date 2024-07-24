@@ -1,7 +1,7 @@
 (ns tesla-solar-charger.gophers.get-car-state
   (:require
    [tesla-solar-charger.log :as log]
-   [tesla-solar-charger.interfaces.car :as Icar]
+   [tesla-solar-charger.car.car :as car]
    [clojure.core.async :refer [>! close! sliding-buffer alts! timeout chan go]]
    [tesla-solar-charger.utils :as utils]))
 
@@ -18,7 +18,7 @@
             (log/info log-prefix "Process dying...")
             (let [car (:car state)
                   last-car-state (:last-car-state state)
-                  func (partial Icar/get-state car)
+                  func (partial car/get-state car)
                   [error car-state] (utils/try-return-error func)]
               (if (some? error)
                 (do
@@ -29,7 +29,7 @@
                   (log/verbose log-prefix (format "Last car state: %s" (into {} (take 3 last-car-state))))
                   (log/info log-prefix (format "New car state:  %s" (into {} (take 3 car-state))))
                   (if (and (some? last-car-state)
-                           (not (Icar/is-newer? car-state last-car-state)))
+                           (not (car/is-newer? car-state last-car-state)))
                     (do
                       (log/verbose log-prefix "No new car state")
                       (log/verbose log-prefix "Sleeping for 10s")
