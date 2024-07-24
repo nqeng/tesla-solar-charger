@@ -60,8 +60,8 @@
          location {:latitude location-latitude :longitude location-longitude}
          car-state-ch (get-new-car-state car err-ch kill-ch)
          solar-data-ch (get-new-site-data data-source err-ch kill-ch)
-         power-watts-ch (regulate-charge-rate location car charger car-state-ch solar-data-ch err-ch kill-ch)
-         _ (set-charge-rate charger car power-watts-ch err-ch kill-ch)]
+         current-amps-ch (regulate-charge-rate location car charger car-state-ch solar-data-ch err-ch kill-ch)
+         _ (set-charge-rate car charger current-amps-ch err-ch kill-ch)]
 
      (.addShutdownHook
       (Runtime/getRuntime)

@@ -4,7 +4,8 @@
    [tesla-solar-charger.haversine :refer [haversine]]
    [tesla-solar-charger.car.car :as car]
    [clojure.core.async :as async :refer [close! sliding-buffer chan alts! >! go]]
-   [tesla-solar-charger.utils :as utils]))
+   [tesla-solar-charger.utils :as utils]
+   [tesla-solar-charger.charger.charger :as charger]))
 
 (def distance-between-geo-points-kilometers haversine)
 
@@ -88,7 +89,7 @@
                     (let [car-state val
                           last-car-state (:last-car-state state)
                           state (assoc state :last-car-state car-state)
-                          max-current-amps (:max-charge-current-amps car-state)]
+                          max-charge-power-watts (charger/get-max-car-charge-power-watts charger car-state)]
                       (if (nil? last-car-state)
                         (log/info log-prefix "Received first car state")
                         (log/info log-prefix "Received car state"))
@@ -96,12 +97,12 @@
                         (and (did-car-stop-charging? car-state last-car-state)
                              (did-car-leave-location? location car-state last-car-state))
                         (do (log/info log-prefix "Car stopped charging and left")
-                            (>! output-ch max-current-amps))
+                            (>! output-ch max-charge-power-watts))
 
                         (did-car-stop-charging? car-state last-car-state)
                         (do
                           (log/info log-prefix "Car stopped charging")
-                          (>! output-ch max-current-amps))
+                          (>! output-ch max-charge-power-watts))
 
                         (did-car-leave-location? location car-state last-car-state)
                         (log/info log-prefix "Car left")
@@ -111,7 +112,7 @@
                         (do
                           (log/info log-prefix "Car entered and started charging")
                           (if (:is-override-active car-state)
-
+                            (>! output-ch max-charge-power-watts)
                             (>! output-ch 0)))
 
                         (did-car-enter-location? location car-state last-car-state)
@@ -121,13 +122,13 @@
                         (do
                           (log/info log-prefix "Car started charging")
                           (if (:is-override-active car-state)
-                            (>! output-ch max-current-amps)
+                            (>! output-ch max-charge-power-watts)
                             (>! output-ch 0)))
 
                         (did-override-turn-on? car-state last-car-state)
                         (do
                           (log/info log-prefix "Override turned on")
-                          (>! output-ch max-current-amps))
+                          (>! output-ch max-charge-power-watts))
 
                         (did-override-turn-off? car-state last-car-state)
                         (do
@@ -139,36 +140,33 @@
 
                       (recur state)))
 
-                  (do
-                    (let [data-point val
-                          last-car-state (:last-car-state state)
-                          last-data-point (:last-data-point state)
-                          state (assoc state :last-data-point data-point)]
-                      (if (nil? last-data-point)
-                        (log/info log-prefix "Received first solar data")
-                        (log/info log-prefix "Received solar data"))
-                      (cond
-                        (and (some? last-data-point)
-                             (= (:excess-power-watts data-point) (:excess-power-watts last-data-point)))
-                        (log/info log-prefix "No change to excess power")
+                  (let [data-point val
+                        last-car-state (:last-car-state state)
+                        last-data-point (:last-data-point state)
+                        state (assoc state :last-data-point data-point)]
+                    (if (nil? last-data-point)
+                      (log/info log-prefix "Received first solar data")
+                      (log/info log-prefix "Received solar data"))
+                    (cond
+                      (and (some? last-data-point)
+                           (= (:excess-power-watts data-point) (:excess-power-watts last-data-point)))
+                      (log/info log-prefix "No change to excess power")
 
-                        (nil? last-car-state)
-                        (log/info log-prefix "No car state")
+                      (nil? last-car-state)
+                      (log/info log-prefix "No car state")
 
-                        (not (is-car-charging-at-location? location last-car-state))
-                        (log/info log-prefix "Car is not charging at this location")
+                      (not (is-car-charging-at-location? location last-car-state))
+                      (log/info log-prefix "Car is not charging at this location")
 
-                        (:is-override-active last-car-state)
-                        (log/info log-prefix "Override active")
+                      (:is-override-active last-car-state)
+                      (log/info log-prefix "Override active")
 
-                        :else
-                        (let [charge-current-amps (:charge-current-amps last-car-state)
-                              charge-power-watts (utils/amps-to-watts-three-phase-australia charge-current-amps)
-                              excess-power-watts (:excess-power-watts data-point)
-                              new-charge-power-watts (calc-new-charge-power-watts charge-power-watts excess-power-watts 0 16 16)]
-                          (>! output-ch new-charge-power-watts)))
-
-                      (recur state)))))))))
+                      :else
+                      (let [charge-power-watts (charger/get-car-charge-power-watts charger last-car-state)
+                            excess-power-watts (:excess-power-watts data-point)
+                            new-charge-power-watts (calc-new-charge-power-watts charge-power-watts excess-power-watts 0 16 16)]
+                        (>! output-ch new-charge-power-watts)))
+                    (recur state))))))))
       (log/info log-prefix "Closing channel...")
       (close! output-ch)
       (log/info log-prefix "Process died"))

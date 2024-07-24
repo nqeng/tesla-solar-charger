@@ -1,4 +1,7 @@
 (ns tesla-solar-charger.charger.charger)
 
 (defprotocol ICharger
-  (set-car-charge-power [charger car power-watts]))
+  (get-max-car-charge-power-watts [charger car-state])
+  (get-car-charge-power-watts [charger car-state])
+  (set-car-charge-power-watts [charger car power-watts]))
+
