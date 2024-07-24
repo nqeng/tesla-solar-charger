@@ -46,14 +46,20 @@
    :do (log/set-log-level log-level)
    :do (log/info "Starting...")
 
-   (let [error-ch (async/chan (async/dropping-buffer 1))
+   (let [tesla-vin (System/getenv "TESLA_VIN")
+         tessie-auth-token (System/getenv "TESSIE_AUTH_TOKEN")
+         script-filepath (System/getenv "GOSUNGROW_SCRIPT_FILEPATH")
+         ps-key (System/getenv "GOSUNGROW_PS_KEY")
+         ps-id (System/getenv "GOSUNGROW_PS_ID")
+         ps-point (System/getenv "GOSUNGROW_PS_POINT")
+         error-ch (async/chan (async/dropping-buffer 1))
          kill-ch (async/chan)
-         car1 (new-Tesla "" "")
+         car1 (new-Tesla tesla-vin tessie-auth-token)
          solar-data-source (new-SungrowGoSungrowDataSource
-                           ""
-                           ""
-                           ""
-                           "")
+                            script-filepath
+                            ps-key
+                            ps-id
+                            ps-point)
          site1 (make-charge-site 0 0)
          car-state-ch (get-new-car-state car1 error-ch kill-ch)
          site-data-ch (get-new-site-data solar-data-source error-ch kill-ch)]
@@ -111,10 +117,11 @@
         log-chan)
 
      (.addShutdownHook
-        (Runtime/getRuntime)
-        (Thread.
-         (fn []
-           (async/>!! kill-ch true))))
+      (Runtime/getRuntime)
+      (Thread.
+       (fn []
+         (println "Sending kill signal...")
+         (async/>!! kill-ch true))))
 
      (when-some [error (async/<!! error-ch)]
        (let [stack-trace-string (with-out-str (clojure.stacktrace/print-stack-trace error))]
