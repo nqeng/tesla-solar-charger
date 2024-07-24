@@ -40,8 +40,8 @@
                         (>! error-ch (ex-info "Output channel was closed" {:type :channel-closed})))
                       (do
                         (log/verbose log-prefix "value -> channel")
-                        (log/verbose log-prefix "Sleeping for 60s")
-                        (Thread/sleep 60000)
+                        (log/verbose log-prefix "Sleeping for 30s")
+                        (Thread/sleep 30000)
                         (recur state))))))))))
       (log/verbose log-prefix "Closing channel...")
       (close! output-ch)
