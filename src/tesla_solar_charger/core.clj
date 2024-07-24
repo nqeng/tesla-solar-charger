@@ -54,67 +54,14 @@
          ps-point (System/getenv "GOSUNGROW_PS_POINT")
          error-ch (async/chan (async/dropping-buffer 1))
          kill-ch (async/chan)
-         car1 (new-Tesla tesla-vin tessie-auth-token)
-         solar-data-source (new-GoSungrowDataSource
-                            script-filepath
+         car (new-Tesla tesla-vin tessie-auth-token)
+         data-source (new-GoSungrowDataSource script-filepath
                             ps-key
                             ps-id
                             ps-point)
-         site1 (make-charge-site 0 0)
-         car-state-ch (get-new-car-state car1 error-ch kill-ch)
-         site-data-ch (get-new-site-data solar-data-source error-ch kill-ch)]
-
-     #_(log-loop log-level log-chan error-chan)
-
-     #_(process-sms-messages
-        "Process SMS"
-        [(sms-processors/->SetTargetPercent set-settings-chan get-settings-chan car1 current-car1-state-chan solar-sites)
-         (sms-processors/->SetPowerBuffer set-settings-chan get-settings-chan car1 current-car1-state-chan solar-sites)
-         (sms-processors/->SetTargetTime set-settings-chan get-settings-chan car1 current-car1-state-chan solar-sites)]
-        error-chan
-        log-chan)
-
-     #_(provide-settings
-        ""
-        ""
-        get-settings-chan
-        set-settings-chan
-        error-ch
-        log-ch)
-
-     #_(split-channel
-        new-car1-state-chan
-        [new-car1-state-chan-split1 new-car1-state-chan-split2 new-car1-state-chan-split3]
-        error-chan
-        log-chan)
-
-     #_(provide-current-channel-value
-        new-car1-state-chan-split3
-        current-car1-state-chan
-        error-chan
-        log-chan)
-
-     #_(get-site-data
-        ""
-        (first solar-sites)
-        new-site1-data-chan
-        error-chan
-        log-chan)
-
-     #_(provide-current-channel-value
-        new-site1-data-chan
-        current-site1-data-chan
-        error-chan
-        log-chan)
-
-     #_(regulate-charge-rate
-        ""
-        (-> (default-regulator/->DefaultRegulator car1 (second solar-sites))
-            (regulator/with-regulation-creater (target-time-regulation-creater/->TargetTimeRegulationCreater get-settings-chan)))
-        new-car1-state-chan-split1
-        current-site2-data-chan
-        error-chan
-        log-chan)
+         site (make-charge-site 0 0)
+         car-state-ch (get-new-car-state car error-ch kill-ch)
+         site-data-ch (get-new-site-data data-source error-ch kill-ch)]
 
      (.addShutdownHook
       (Runtime/getRuntime)
