@@ -18,34 +18,7 @@
 (defrecord SungrowSite []
 
   Isite/Site
-
-  (is-car-here? [site car-state] (is-car-within-range? site car-state))
-  (is-car-connected-here? [site car-state]
-    (let [charger (:charger site)]
-      (and (Isite/is-car-here? site car-state)
-           (Isite-charger/is-car-connected-here? charger car-state))))
-  (is-car-charging-here? [site car-state]
-    (let [charger (:charger site)]
-      (and (Isite/is-car-here? site car-state)
-           (Isite-charger/is-car-charging-here? charger car-state))))
-  (did-car-start-charging-here? [site current-car-state previous-car-state]
-    (cond
-      (nil? current-car-state) false
-
-      (nil? previous-car-state) true
-
-      :else
-      (and (Isite/is-car-charging-here? site current-car-state)
-           (not (Isite/is-car-charging-here? site previous-car-state)))))
-  (did-car-stop-charging-here? [site current-car-state previous-car-state]
-    (cond
-      (nil? previous-car-state) false
-
-      (nil? current-car-state) true
-
-      :else
-      (and (not (Isite/is-car-charging-here? site current-car-state))
-           (Isite/is-car-charging-here? site previous-car-state)))))
+  (is-car-here? [site car-state] (is-car-within-range? site car-state)))
 
 (defn new-SungrowSite
   [id name latitude longitude detection-range-meters data-source]
