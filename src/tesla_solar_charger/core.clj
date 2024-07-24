@@ -8,7 +8,6 @@
    [tesla-solar-charger.utils :as utils]
    [tesla-solar-charger.gophers.utils :refer [sliding-buffer keep-last-value print-values]]
    [tesla-solar-charger.car.tesla :refer [new-Tesla]]
-   [tesla-solar-charger.implementations.site.sungrow-site :refer [new-SungrowSite]]
    [tesla-solar-charger.implementations.site-data.gosungrow-data-source :refer [new-GoSungrowDataSource]]
    [tesla-solar-charger.implementations.site-data.sungrow-live-data-source :refer [new-SungrowLiveDataSource]]
    [tesla-solar-charger.gophers.get-site-data :refer [get-new-site-data]]

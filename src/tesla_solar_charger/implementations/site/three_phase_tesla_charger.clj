@@ -1,7 +1,7 @@
 (ns tesla-solar-charger.implementations.site.three-phase-tesla-charger
   (:require
    [tesla-solar-charger.utils :as utils]
-   [tesla-solar-charger.interfaces.site-charger :as Isite-charger]
+   [tesla-solar-charger.interfaces.charger :as charger]
    [tesla-solar-charger.interfaces.car :as Icar]))
 
 (defn get-three-phase-voltage-volts
@@ -46,7 +46,7 @@
 
 (defrecord TeslaChargerThreePhase []
 
-  Isite-charger/ICharger
+  charger/ICharger
   (set-car-charge-power [charger car power-watts]
     (let [current-amps (convert-watts-to-amps charger power-watts)
           result (Isite-charger/set-car-charge-current charger car current-amps)]
