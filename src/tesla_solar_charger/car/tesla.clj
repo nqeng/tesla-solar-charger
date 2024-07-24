@@ -10,9 +10,22 @@
 (def power-to-current-1-phase 231.25)
 (def power-to-current-2-phase 462.5)
 
+(defn set-charge-current
+  [car new-current-amps]
+  (let [vin (:vin car)
+        auth-token (:auth-token car)
+        url (str "https://api.tessie.com/" vin "/command/set_charging_amps")
+        query-params {:retry-duration "40"
+                      :wait-for-completion "true"
+                      :amps new-current-amps}
+        headers {:oauth-token auth-token
+                 :accept :json
+                 :query-params query-params}]
+    (client/get url headers)
+    nil))
+
 (defrecord Tesla []
   car/Car
-
   (get-state [car]
     (let [vin (:vin car)
           auth-token (:auth-token car)
@@ -35,30 +48,20 @@
           latitude (get drive-state "latitude")
           longitude (get drive-state "longitude")
           state (car/make-car-state timestamp
-                                is-connected
-                                is-charging
-                                is-override-active
-                                charge-limit-percent
-                                minutes-to-full-charge
-                                charge-current-amps
-                                max-charge-current-amps
-                                latitude
-                                longitude)]
+                                    is-connected
+                                    is-charging
+                                    is-override-active
+                                    charge-limit-percent
+                                    minutes-to-full-charge
+                                    charge-current-amps
+                                    max-charge-current-amps
+                                    latitude
+                                    longitude)]
       state))
-
   (get-vin [car] (:vin car))
   (get-name [car] "Tesla")
-  (set-charge-current [car new-charge-current-amps]
-    (let [vin (:vin car)
-          auth-token (:auth-token car)
-          url (str "https://api.tessie.com/" vin "/command/set_charging_amps")
-          headers {:oauth-token auth-token
-                   :accept :json
-                   :query-params {:retry-duration "40"
-                                  :wait-for-completion "true"
-                                  :amps (str new-charge-current-amps)}}]
-      (client/get url headers)
-      nil))
+  (set-charge-current [car new-current-amps]
+    (set-charge-current car new-current-amps))
   (restore-this-state [car state-to-restore]
     (let [charge-rate-amps (:charge-current-amps state-to-restore)]
       (car/set-charge-current car charge-rate-amps))))
