@@ -1,21 +1,18 @@
 (ns tesla-solar-charger.data-source.dummy-data-source
   (:require
-   [tesla-solar-charger.implementations.site-data.sungrow-site-data :refer [new-SungrowSiteData]]
-   [tesla-solar-charger.interfaces.site :as Isite]
-   [tesla-solar-charger.interfaces.site-data :as Isite-data]
+   [tesla-solar-charger.interfaces.site-data :as site-data]
    [tesla-solar-charger.utils :as utils]))
+
+(defn get-latest-data-point
+  [data-source]
+  (let [excess-power-watts 100
+        data (site-data/make-data-point (utils/time-now) excess-power-watts)]
+    data))
 
 (defrecord DummyDataSource []
 
-  Isite-data/SiteDataSource
-
-  (get-latest-data-point [data-source]
-    (let [excess-power-watts 100
-          data (Isite-data/make-data-point (utils/time-now) excess-power-watts)]
-      data))
-  (when-next-data-point-available?
-    [data-source last-data-point]
-    (.plusSeconds (:timestamp last-data-point) 30)))
+  site-data/IDataSource
+  (get-latest-data-point [data-source] (get-latest-data-point data-source)))
 
 (defn new-DummyDataSource
   []

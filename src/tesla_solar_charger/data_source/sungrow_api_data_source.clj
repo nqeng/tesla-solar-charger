@@ -1,20 +1,9 @@
 (ns tesla-solar-charger.data-source.sungrow-api-data-source
   (:require
    [tesla-solar-charger.utils :as utils]
-   [clojure.string :as s]
    [cheshire.core :as json]
    [clj-http.client :as client]
-   [better-cond.core :refer [cond] :rename {cond better-cond}]
-   [tesla-solar-charger.implementations.site-data.sungrow-site-data :refer [new-SungrowSiteData]]
-   [tesla-solar-charger.interfaces.site :as Isite]
-   [tesla-solar-charger.interfaces.site-data :as Isite-data]
-   ))
-
-(def power-to-current-3-phase 687.5)
-(def power-to-current-3-phase-delta 262.5)
-(def power-to-current-1-phase 231.25)
-(def power-to-current-2-phase 462.5)
-(def data-interval-minutes 5)
+   [tesla-solar-charger.interfaces.site-data :as site-data]))
 
 (defn create-data-point-timestamp
   "15/05/2023:14:00:00 => 20230515140000"
@@ -129,8 +118,8 @@
                                    :start_time_stamp (get-latest-data-timestamp start-time data-interval-minutes)
                                    :end_time_stamp (get-latest-data-timestamp end-time data-interval-minutes)
                                    :minute_interval data-interval-minutes
-                                   :ps_key (s/join "," ps-keys)
-                                   :points (s/join "," points)}
+                                   :ps_key (clojure.string/join "," ps-keys)
+                                   :points (clojure.string/join "," points)}
                      :content-type :json})
 
           json (json/parse-string (:body response))
@@ -169,111 +158,8 @@
 
 (defrecord SungrowAPIDataSource []
 
-  Isite-data/SiteDataSource
-
-  (get-data [data-source request]
-
-    (when (nil? (:start-time request))
-      (throw (java.lang.IllegalArgumentException. "Null start time")))
-
-    (when (nil? (:end-time request))
-      (throw (java.lang.IllegalArgumentException. "Null end time")))
-
-  site/SiteDataPoint
-
-  (get-time [point] (get point :time))
-  (get-excess-power-watts [point] (get point :excess-power-watts)))
-
-(defrecord SungrowSite [id name latitude longitude username password values power-to-current-factor]
-
-  site/Site
-
-  (get-name [site] name)
-  (get-id [site] id)
-  (is-car-here? [site car-state]
-    (< (euclidean-distance
-        (car/get-latitude car-state)
-        (car/get-longitude car-state)
-        latitude
-        longitude) 0.0005))
-
-  (power-watts-to-current-amps [site power-watts] (/ power-watts power-to-current-factor))
-
-  (get-data [site request]
-    (try
-      (better-cond
-       :let [username (:username data-source)
-             password (:password data-source)
-             app-key (:app-key data-source)
-             start-time (:start-time request)
-             end-time (:end-time request)
-             data-interval-minutes (:data-interval-minutes data-source)
-             values (:values data-source)]
-
-       :let [sungrow-token (if-some [sungrow-token (:sungrow-token data-source)]
-                             sungrow-token
-                             (login username password app-key))]
-
-       :let [data (try
-                    (apply get-data
-                           sungrow-token
-                           start-time
-                           end-time
-                           app-key
-                           data-interval-minutes
-                           (map last values))
-                    (catch clojure.lang.ExceptionInfo e
-                      (case (:type (ex-data e))
-                        :err-sungrow-auth-failed
-                        (try
-                          (apply get-data
-                                 (login username password app-key)
-                                 start-time
-                                 end-time
-                                 app-key
-                                 data-interval-minutes
-                                 (map last values))
-
-                          (catch clojure.lang.ExceptionInfo e
-                            (throw e))
-                          (catch Exception e
-                            (throw e)))
-
-                        (throw e)
-                        ))
-                    (catch Exception e
-                      (throw e)))]
-
-       :let [excess-power-keys (:excess-power-watts values)
-             excess-power (-> data
-                              (get-in excess-power-keys)
-                              first
-                              (get 1 "--"))
-             excess-power (try (- (Float/parseFloat excess-power)) (catch Exception e nil))
-             time (-> data
-                      (get-in excess-power-keys)
-                      first
-                      (get 0 (utils/format-time "yyyyMMddHHmmss" (get-latest-data-publish-time (utils/time-now) data-interval-minutes)))
-                      (utils/parse-time "yyyyMMddHHmmss"))]
-
-       :let [next-data-available-time (if (nil? excess-power)
-                                        (.plusSeconds time 60)
-                                        (.plusSeconds (get-next-data-publish-time time data-interval-minutes) 60))]
-       :let [data-source (assoc data-source :next-data-available-time next-data-available-time)]
-
-       :let [data (new-SungrowSiteData)]
-
-       :let [data (if (some? excess-power)
-                    (-> data
-                        (Isite-data/add-point time excess-power))
-                    data)]
-
-       [data-source data])
-      (catch clojure.lang.ExceptionInfo e
-        (throw e))
-      (catch Exception e
-        (throw e))))
-  (when-next-data-ready? [data-source] (:next-data-available-time data-source)))
+  site-data/IDataSource
+  (get-latest-data-point [data-source] (throw (ex-info "Not implemented" {}))))
 
 (defn new-SungrowAPIDataSource
   [username password app-key data-interval-minutes values]

@@ -2,9 +2,7 @@
   (:require
    [etaoin.api :as e]
    [etaoin.keys :as k]
-   [clojure.string :as s]
-   [tesla-solar-charger.interfaces.site :as Isite]
-   [tesla-solar-charger.interfaces.site-data :as Isite-data]
+   [tesla-solar-charger.interfaces.site-data :as site-data]
    [tesla-solar-charger.utils :as utils]))
 
 (defn parse-value-in-watts
@@ -48,8 +46,7 @@
 
 (defrecord SungrowLiveDataSource []
 
-  Isite-data/SiteDataSource
-
+  site-data/IDataSource
   (get-latest-data-point [data-source]
     (let [browser-type (:browser-type data-source)
           browser-options (:browser-options data-source)
@@ -62,9 +59,8 @@
                               username
                               password
                               plant-name)
-          data (Isite-data/make-data-point (utils/local-now) excess-power-watts)
-          next-data-time (utils/time-after-seconds 30)]
-      [data next-data-time])))
+          data (site-data/make-data-point (utils/local-now) excess-power-watts)]
+      data)))
 
 (defn new-SungrowLiveDataSource
   [browser-type browser-options username password plant-name]
@@ -73,6 +69,6 @@
                  :username username
                  :password password
                  :plant-name plant-name}
-        defaults {:next-data-available-time (utils/local-now)}]
+        defaults {}]
     (map->SungrowLiveDataSource (merge the-map defaults))))
 

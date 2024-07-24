@@ -1,9 +1,9 @@
 (ns tesla-solar-charger.data-source.gosungrow-data-source
   (:require
    [cheshire.core :as json]
-   [tesla-solar-charger.interfaces.site-data :as Isite-data]
-   [tesla-solar-charger.utils :as utils])
-  (:use [clojure.java.shell :only [sh]]))
+   [tesla-solar-charger.interfaces.site-data :as site-data]
+   [clojure.java.shell :refer [sh]]
+   [tesla-solar-charger.utils :as utils]))
 
 (defn round-minutes-up-to-interval
   [instant interval-minutes]
@@ -34,12 +34,16 @@
   (let [time-string (get object "timestamp")
         time (.toInstant (.atZone (parse-timestamp1 time-string) (java.time.ZoneId/systemDefault)))
         excess-power-watts (get-in object ["points" excess-power-key])
-        data-point (Isite-data/make-data-point time excess-power-watts)]
+        data-point (site-data/make-data-point time excess-power-watts)]
     data-point))
 
 (defn get-latest-data-point
-  [script-filepath ps-key ps-id excess-power-key]
-  (let [time-now (.minusSeconds (utils/time-now) 60)
+  [data-source]
+  (let [script-filepath (:script-filepath data-source)
+        ps-key (:ps-key data-source)
+        ps-id (:ps-id data-source)
+        excess-power-key (:excess-power-key data-source)
+        time-now (.minusSeconds (utils/time-now) 60)
         rounded (round-minutes-down-to-interval time-now 5)
         start-timestamp (format-timestamp1 (.minusSeconds rounded (* 5 60)))
         end-timestamp (format-timestamp1 rounded)
@@ -64,15 +68,8 @@
 
 (defrecord GoSungrowDataSource []
 
-  Isite-data/SiteDataSource
-
-  (get-latest-data-point [data-source]
-    (let [script-filepath (:script-filepath data-source)
-          ps-key (:ps-key data-source)
-          ps-id (:ps-id data-source)
-          excess-power-key (:excess-power-key data-source)
-          data-point (get-latest-data-point script-filepath ps-key ps-id excess-power-key)]
-      data-point)))
+  site-data/IDataSource
+  (get-latest-data-point [data-source] (get-latest-data-point data-source)))
 
 (defn new-GoSungrowDataSource
   [script-filepath ps-key ps-id excess-power-key]
