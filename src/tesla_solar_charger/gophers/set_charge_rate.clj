@@ -1,23 +1,12 @@
 (ns tesla-solar-charger.gophers.set-charge-rate
   (:require
-   [clj-http.client :as client]
    [tesla-solar-charger.log :as log]
    [tesla-solar-charger.utils :as utils]
+   [tesla-solar-charger.interfaces.car :as ICar]
    [clojure.core.async :refer [sliding-buffer chan close! <! >! go alts!]]))
 
-(defn set-charge-current
-  [new-current-amps tesla-vin auth-token]
-  (let [url (str "https://api.tessie.com/" tesla-vin "/command/set_charging_amps")
-        query-params {:retry-duration "40"
-                      :wait-for-completion "true"
-                      :amps new-current-amps}
-        headers {:oauth-token auth-token
-                 :accept :json
-                 :query-params query-params}]
-    (client/post url headers)))
-
 (defn set-charge-rate
-  [tesla-vin auth-token err-ch kill-ch]
+  [car err-ch kill-ch]
   (let [log-prefix "set-charge-rate"
         input-ch (chan (sliding-buffer 1))]
     (go
@@ -33,7 +22,7 @@
                 (let [charge-current-amps (utils/watts-to-amps-three-phase-australia power-watts)]
                   (log/info log-prefix (format "Setting charge rate to %dA..." charge-current-amps))
                   (try
-                    (set-charge-current charge-current-amps tesla-vin auth-token)
+                    (ICar/set-charge-current car charge-current-amps)
                     (log/info log-prefix "Successfully set charge rate")
                     (catch clojure.lang.ExceptionInfo e
                       (log/error log-prefix (format "Failed to set charge rate; %s" (ex-message e))))
