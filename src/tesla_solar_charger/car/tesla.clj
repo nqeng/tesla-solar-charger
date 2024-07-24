@@ -58,15 +58,18 @@
                                   longitude)]
     state))
 
+(defn restore-this-state
+  [car state]
+  (let [charge-rate-amps (:charge-current-amps state)]
+    (set-charge-current car charge-rate-amps)))
+
 (defrecord Tesla []
   car/Car
   (get-state [car] (get-state car))
   (get-vin [car] (:vin car))
   (get-name [car] "Tesla")
   (set-charge-current [car new-current-amps] (set-charge-current car new-current-amps))
-  (restore-this-state [car state-to-restore]
-    (let [charge-rate-amps (:charge-current-amps state-to-restore)]
-      (car/set-charge-current car charge-rate-amps))))
+  (restore-this-state [car state] (restore-this-state car state)))
 
 (defn new-Tesla
   [vin auth-token]
