@@ -57,10 +57,10 @@
                                               ps-id
                                               ps-point)
          charger (new-TeslaChargerThreePhase)
-         location {:latitude location-latitude :longitude location-latitude}
+         location {:latitude location-latitude :longitude location-longitude}
          car-state-ch (get-new-car-state car err-ch kill-ch)
          solar-data-ch (get-new-site-data data-source err-ch kill-ch)
-         power-watts-ch (regulate-charge-rate location car-state-ch solar-data-ch err-ch kill-ch)
+         power-watts-ch (regulate-charge-rate location car charger car-state-ch solar-data-ch err-ch kill-ch)
          _ (set-charge-rate charger car power-watts-ch err-ch kill-ch)]
 
      (.addShutdownHook

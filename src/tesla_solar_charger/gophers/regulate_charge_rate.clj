@@ -2,6 +2,7 @@
   (:require
    [tesla-solar-charger.log :as log]
    [tesla-solar-charger.haversine :refer [haversine]]
+   [tesla-solar-charger.car.car :as car]
    [clojure.core.async :as async :refer [close! sliding-buffer chan alts! >! go]]
    [tesla-solar-charger.utils :as utils]))
 
@@ -56,8 +57,18 @@
   [car-state last-car-state]
   (and (:is-override-active car-state) (or (nil? last-car-state) (not (:is-override-active last-car-state)))))
 
+(defn make-car-state-message
+  [car car-state]
+  (format
+   "%s is at (%.2f, %.2f) (%s) at %sA"
+   (car/get-name car)
+   (:latitude car-state)
+   (:longitude car-state)
+   (if (:is-charging car-state) "charging" "not charging")
+   (:charge-current-amps car-state)))
+
 (defn regulate-charge-rate
-  [location car-state-ch solar-data-ch err-ch kill-ch]
+  [location car charger car-state-ch solar-data-ch err-ch kill-ch]
   (let [log-prefix "regulate-charge-rate"
         output-ch (chan (sliding-buffer 1))]
     (go
@@ -124,7 +135,7 @@
                           (>! output-ch 0))
 
                         :else
-                        nil)
+                        (log/info log-prefix (make-car-state-message car car-state)))
 
                       (recur state)))
 
