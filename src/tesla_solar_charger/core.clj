@@ -12,8 +12,7 @@
    [tesla-solar-charger.car.tesla :refer [new-Tesla]]
    [tesla-solar-charger.data-source.gosungrow-data-source :refer [new-GoSungrowDataSource]]
    [tesla-solar-charger.gophers.get-site-data :refer [get-new-site-data]]
-   [clojure.core.async :as async]
-   [tesla-solar-charger.interfaces.site :as Isite]))
+   [clojure.core.async :as async]))
 
 (def cli-options
   ;; An option with a required argument
