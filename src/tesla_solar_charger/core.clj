@@ -4,7 +4,9 @@
    [clojure.tools.cli :refer [parse-opts]]
    [tesla-solar-charger.log :as log]
    [tesla-solar-charger.gophers.get-car-state :refer [get-new-car-state]]
+   [tesla-solar-charger.gophers.set-charge-rate :refer [set-charge-rate]]
    [better-cond.core :refer [cond] :rename {cond better-cond}]
+   [tesla-solar-charger.implementations.site.three-phase-tesla-charger :refer [new-TeslaChargerThreePhase]]
    [tesla-solar-charger.utils :as utils]
    [tesla-solar-charger.gophers.utils :refer [sliding-buffer keep-last-value print-values]]
    [tesla-solar-charger.car.tesla :refer [new-Tesla]]
@@ -55,12 +57,14 @@
          kill-ch (async/chan)
          car (new-Tesla tesla-vin tessie-auth-token)
          data-source (new-GoSungrowDataSource script-filepath
-                            ps-key
-                            ps-id
-                            ps-point)
+                                              ps-key
+                                              ps-id
+                                              ps-point)
+         charger (new-TeslaChargerThreePhase)
          site (make-charge-site 0 0)
          car-state-ch (get-new-car-state car error-ch kill-ch)
-         site-data-ch (get-new-site-data data-source error-ch kill-ch)]
+         site-data-ch (get-new-site-data data-source error-ch kill-ch)
+         power-watts-ch (set-charge-rate charger car error-ch kill-ch)]
 
      (.addShutdownHook
       (Runtime/getRuntime)
