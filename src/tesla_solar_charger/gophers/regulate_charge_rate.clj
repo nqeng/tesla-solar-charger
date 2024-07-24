@@ -36,27 +36,27 @@
 
 (defn did-car-start-charging?
   [car-state last-car-state]
-  (and (:is-charging car-state) (or (nil? last-car-state) (not (:is-charging last-car-state)))))
+  (or (nil? last-car-state) (not (:is-charging last-car-state))))
 
 (defn did-car-leave-location?
   [location car-state last-car-state]
-  (and (some? last-car-state) (not (is-car-at-location? location car-state)) (is-car-at-location? location last-car-state)))
+  (and (not (is-car-at-location? location car-state)) (is-car-at-location? location last-car-state)))
 
 (defn did-car-enter-location?
   [location car-state last-car-state]
-  (and (is-car-at-location? location car-state) (or (nil? last-car-state) (not (is-car-at-location? location last-car-state)))))
+  (and (is-car-at-location? location car-state) (not (is-car-at-location? location last-car-state))))
 
 (defn did-car-stop-charging?
   [car-state last-car-state]
-  (and (some? last-car-state) (not (:is-charging car-state)) (:is-charging last-car-state)))
+  (and (not (:is-charging car-state)) (:is-charging last-car-state)))
 
 (defn did-override-turn-off?
   [car-state last-car-state]
-  (and (some? last-car-state) (not (:is-override-active car-state)) (:is-override-active last-car-state)))
+  (and (not (:is-override-active car-state)) (:is-override-active last-car-state)))
 
 (defn did-override-turn-on?
   [car-state last-car-state]
-  (and (:is-override-active car-state) (or (nil? last-car-state) (not (:is-override-active last-car-state)))))
+  (and (:is-override-active car-state) (not (:is-override-active last-car-state))))
 
 (defn make-car-state-message
   [car car-state]
@@ -94,6 +94,9 @@
                         (log/info log-prefix "Received first car state")
                         (log/info log-prefix "Received car state"))
                       (cond
+                        (nil? last-car-state)
+                        (log/info "No previous car state")
+
                         (and (did-car-stop-charging? car-state last-car-state)
                              (did-car-leave-location? location car-state last-car-state))
                         (do (log/info log-prefix "Car stopped charging and left")
