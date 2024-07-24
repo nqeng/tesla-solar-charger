@@ -11,10 +11,10 @@
     (go
       (log/info log-prefix "Process starting...")
       (loop [state {}]
-        (let [[_ ch] (alts! [kill-ch] :default nil)]
+        (let [[val ch] (alts! [kill-ch input-ch])]
           (if (= ch kill-ch)
             (log/info log-prefix "Process dying...")
-            (let [power-watts (<! input-ch)]
+            (let [power-watts val]
               (if (nil? power-watts)
                 (do (log/error log-prefix "Input channel was closed")
                     (>! err-ch (ex-info "Input channel was closed" {:type :channel-closed})))
