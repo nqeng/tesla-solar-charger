@@ -11,14 +11,14 @@
   [lat1 lng1 lat2 lng2]
   (* 1000 (distance-between-geo-points-kilometers {:lng lng1 :lat lat1} {:lng lng2 :lat lat2})))
 
-(defn is-car-at-site?
-  [site car-state]
+(defn is-car-at-location?
+  [location car-state]
   (let [range-meters 50
         distance-between-meters (distance-between-geo-points-meters
                                  (:latitude car-state)
                                  (:longitude car-state)
-                                 (:latitude site)
-                                 (:longitude site))]
+                                 (:latitude location)
+                                 (:longitude location))]
     (< distance-between-meters range-meters)))
 
 (defn calc-new-charge-power-watts
@@ -28,21 +28,21 @@
         new-power-watts (+ power-watts adjustment-power-watts)]
     new-power-watts))
 
-(defn is-car-charging-at-site?
-  [site car-state]
-  (and (is-car-at-site? site car-state) (:is-charging car-state)))
+(defn is-car-charging-at-location?
+  [location car-state]
+  (and (is-car-at-location? location car-state) (:is-charging car-state)))
 
 (defn did-car-start-charging?
   [car-state last-car-state]
   (and (:is-charging car-state) (or (nil? last-car-state) (not (:is-charging last-car-state)))))
 
-(defn did-car-leave-site?
-  [site car-state last-car-state]
-  (and (some? last-car-state) (not (is-car-at-site? site car-state)) (is-car-at-site? site last-car-state)))
+(defn did-car-leave-location?
+  [location car-state last-car-state]
+  (and (some? last-car-state) (not (is-car-at-location? location car-state)) (is-car-at-location? location last-car-state)))
 
-(defn did-car-enter-site?
-  [site car-state last-car-state]
-  (and (is-car-at-site? site car-state) (or (nil? last-car-state) (not (is-car-at-site? site last-car-state)))))
+(defn did-car-enter-location?
+  [location car-state last-car-state]
+  (and (is-car-at-location? location car-state) (or (nil? last-car-state) (not (is-car-at-location? location last-car-state)))))
 
 (defn did-car-stop-charging?
   [car-state last-car-state]
@@ -57,7 +57,7 @@
   (and (:is-override-active car-state) (or (nil? last-car-state) (not (:is-override-active last-car-state)))))
 
 (defn regulate-charge-rate
-  [site car-state-ch site-data-ch charge-current-ch err-ch kill-ch]
+  [location car-state-ch solar-data-ch charge-current-ch err-ch kill-ch]
   (let [log-prefix "regulate-charge-rate"]
     (go
       (log/info log-prefix "Process starting...")
@@ -66,7 +66,7 @@
         (let [[_ ch] (alts! [kill-ch] :default nil)]
           (if (= ch kill-ch)
             (log/info log-prefix "Process dying...")
-            (let [[val ch] (alts! [car-state-ch site-data-ch])]
+            (let [[val ch] (alts! [car-state-ch solar-data-ch])]
               (if (nil? val)
                 (do
                   (log/error log-prefix "Input channel was closed")
@@ -80,7 +80,7 @@
                           max-current-amps (:max-charge-current-amps car-state)]
                       (cond
                         (and (did-car-stop-charging? car-state last-car-state)
-                             (did-car-leave-site? site car-state last-car-state))
+                             (did-car-leave-location? location car-state last-car-state))
                         (do (log/info log-prefix "Car stopped charging and left")
                             (>! charge-current-ch max-current-amps))
 
@@ -89,10 +89,10 @@
                           (log/info log-prefix "Car stopped charging")
                           (>! charge-current-ch max-current-amps))
 
-                        (did-car-leave-site? site car-state last-car-state)
+                        (did-car-leave-location? location car-state last-car-state)
                         (log/info log-prefix "Car left")
 
-                        (and (did-car-enter-site? site car-state last-car-state)
+                        (and (did-car-enter-location? location car-state last-car-state)
                              (did-car-start-charging? car-state last-car-state))
                         (do
                           (log/info log-prefix "Car entered and started charging")
@@ -100,7 +100,7 @@
                             
                             (>! charge-current-ch 0)))
 
-                        (did-car-enter-site? site car-state last-car-state)
+                        (did-car-enter-location? location car-state last-car-state)
                         (log/info log-prefix "Car entered")
 
                         (did-car-start-charging? car-state last-car-state)
@@ -126,7 +126,7 @@
                       (recur state)))
 
                   (do
-                    (log/info log-prefix "Received site data")
+                    (log/info log-prefix "Received solar data")
                     (let [data-point val
                           last-car-state (:last-car-state state)
                           last-data-point (:last-data-point state)
@@ -139,8 +139,8 @@
                         (nil? last-car-state)
                         (log/info log-prefix "No car state")
 
-                        (not (is-car-charging-at-site? site last-car-state))
-                        (log/info log-prefix "Car is not charging at this site")
+                        (not (is-car-charging-at-location? location last-car-state))
+                        (log/info log-prefix "Car is not charging at this location")
 
                         (:is-override-active last-car-state)
                         (log/info log-prefix "Override active")
