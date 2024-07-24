@@ -47,6 +47,8 @@
          ps-key (System/getenv "GOSUNGROW_PS_KEY")
          ps-id (System/getenv "GOSUNGROW_PS_ID")
          ps-point (System/getenv "GOSUNGROW_PS_POINT")
+         location-latitude (parse-double (System/getenv "LOCATION_LATITUDE"))
+         location-longitude (parse-double (System/getenv "LOCATION_LONGITUDE"))
          err-ch (async/chan (async/dropping-buffer 1))
          kill-ch (async/chan)
          car (new-Tesla tesla-vin tessie-auth-token)
@@ -55,7 +57,7 @@
                                               ps-id
                                               ps-point)
          charger (new-TeslaChargerThreePhase)
-         location {:latitude 0 :longitude 0}
+         location {:latitude location-latitude :longitude location-latitude}
          car-state-ch (get-new-car-state car err-ch kill-ch)
          solar-data-ch (get-new-site-data data-source err-ch kill-ch)
          power-watts-ch (regulate-charge-rate location car-state-ch solar-data-ch err-ch kill-ch)
