@@ -2,7 +2,7 @@
   (:require
    [tesla-solar-charger.log :as log]
    [tesla-solar-charger.haversine :refer [haversine]]
-   [clojure.core.async :as async :refer [alts! >! go]]
+   [clojure.core.async :as async :refer [close! sliding-buffer chan alts! >! go]]
    [tesla-solar-charger.utils :as utils]))
 
 (def distance-between-geo-points-kilometers haversine)
@@ -57,8 +57,9 @@
   (and (:is-override-active car-state) (or (nil? last-car-state) (not (:is-override-active last-car-state)))))
 
 (defn regulate-charge-rate
-  [location car-state-ch solar-data-ch charge-current-ch err-ch kill-ch]
-  (let [log-prefix "regulate-charge-rate"]
+  [location car-state-ch solar-data-ch err-ch kill-ch]
+  (let [log-prefix "regulate-charge-rate"
+        output-ch (chan (sliding-buffer 1))]
     (go
       (log/info log-prefix "Process starting...")
       (loop [state {:last-car-state nil
@@ -82,12 +83,12 @@
                         (and (did-car-stop-charging? car-state last-car-state)
                              (did-car-leave-location? location car-state last-car-state))
                         (do (log/info log-prefix "Car stopped charging and left")
-                            (>! charge-current-ch max-current-amps))
+                            (>! output-ch max-current-amps))
 
                         (did-car-stop-charging? car-state last-car-state)
                         (do
                           (log/info log-prefix "Car stopped charging")
-                          (>! charge-current-ch max-current-amps))
+                          (>! output-ch max-current-amps))
 
                         (did-car-leave-location? location car-state last-car-state)
                         (log/info log-prefix "Car left")
@@ -97,8 +98,8 @@
                         (do
                           (log/info log-prefix "Car entered and started charging")
                           (if (:is-override-active car-state)
-                            
-                            (>! charge-current-ch 0)))
+
+                            (>! output-ch 0)))
 
                         (did-car-enter-location? location car-state last-car-state)
                         (log/info log-prefix "Car entered")
@@ -107,18 +108,18 @@
                         (do
                           (log/info log-prefix "Car started charging")
                           (if (:is-override-active car-state)
-                            (>! charge-current-ch max-current-amps)
-                            (>! charge-current-ch 0)))
+                            (>! output-ch max-current-amps)
+                            (>! output-ch 0)))
 
                         (did-override-turn-on? car-state last-car-state)
                         (do
                           (log/info log-prefix "Override turned on")
-                          (>! charge-current-ch max-current-amps))
+                          (>! output-ch max-current-amps))
 
                         (did-override-turn-off? car-state last-car-state)
                         (do
                           (log/info log-prefix "Override turned off")
-                          (>! charge-current-ch 0))
+                          (>! output-ch 0))
 
                         :else
                         (log/info log-prefix "No change to car state"))
@@ -150,7 +151,10 @@
                               charge-power-watts (utils/amps-to-watts-three-phase-australia charge-current-amps)
                               excess-power-watts (:excess-power-watts data-point)
                               new-charge-power-watts (calc-new-charge-power-watts charge-power-watts excess-power-watts 0 16 16)]
-                          (>! charge-current-ch new-charge-power-watts)))
+                          (>! output-ch new-charge-power-watts)))
 
                       (recur state)))))))))
-      (log/info log-prefix "Process died"))))
+      (log/info log-prefix "Closing channel...")
+      (close! output-ch)
+      (log/info log-prefix "Process died"))
+    output-ch))

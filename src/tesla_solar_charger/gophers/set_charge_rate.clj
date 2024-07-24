@@ -2,12 +2,11 @@
   (:require
    [tesla-solar-charger.log :as log]
    [tesla-solar-charger.charger.charger :as charger]
-   [clojure.core.async :refer [sliding-buffer chan close! <! >! go alts!]]))
+   [clojure.core.async :refer [>! go alts!]]))
 
 (defn set-charge-rate
-  [charger car err-ch kill-ch]
-  (let [log-prefix "set-charge-rate"
-        input-ch (chan (sliding-buffer 1))]
+  [charger car input-ch err-ch kill-ch]
+  (let [log-prefix "set-charge-rate"]
     (go
       (log/info log-prefix "Process starting...")
       (loop [state {}]
@@ -28,8 +27,5 @@
                     (catch Exception e
                       (log/error log-prefix (format "Failed to set charge rate; %s" (ex-message e)))))
                   (recur state)))))))
-      (log/verbose log-prefix "Closing channel...")
-      (close! input-ch)
-      (log/verbose log-prefix "Process died"))
-    input-ch))
+      (log/verbose log-prefix "Process died"))))
 

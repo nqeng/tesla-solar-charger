@@ -8,6 +8,7 @@
    [better-cond.core :refer [cond] :rename {cond better-cond}]
    [tesla-solar-charger.charger.three-phase-tesla-charger :refer [new-TeslaChargerThreePhase]]
    [tesla-solar-charger.utils :as utils]
+   [tesla-solar-charger.gophers.regulate-charge-rate :refer [regulate-charge-rate]]
    [tesla-solar-charger.gophers.utils :refer [sliding-buffer keep-last-value print-values]]
    [tesla-solar-charger.car.tesla :refer [new-Tesla]]
    [tesla-solar-charger.data-source.gosungrow-data-source :refer [new-GoSungrowDataSource]]
@@ -21,11 +22,6 @@
     :parse-fn keyword
     :validate [#(contains? #{:info :verbose :error} %) "Must be one of: (info, verbose, error)"]]
    ["-h" "--help"]])
-
-(defn make-charge-site
-  [latitude longitude]
-  {:latitude latitude
-   :longitude longitude})
 
 (defn -main
   [& args]
@@ -51,7 +47,7 @@
          ps-key (System/getenv "GOSUNGROW_PS_KEY")
          ps-id (System/getenv "GOSUNGROW_PS_ID")
          ps-point (System/getenv "GOSUNGROW_PS_POINT")
-         error-ch (async/chan (async/dropping-buffer 1))
+         err-ch (async/chan (async/dropping-buffer 1))
          kill-ch (async/chan)
          car (new-Tesla tesla-vin tessie-auth-token)
          data-source (new-GoSungrowDataSource script-filepath
@@ -59,10 +55,11 @@
                                               ps-id
                                               ps-point)
          charger (new-TeslaChargerThreePhase)
-         site (make-charge-site 0 0)
-         car-state-ch (get-new-car-state car error-ch kill-ch)
-         site-data-ch (get-new-site-data data-source error-ch kill-ch)
-         power-watts-ch (set-charge-rate charger car error-ch kill-ch)]
+         location {:latitude 0 :longitude 0}
+         car-state-ch (get-new-car-state car err-ch kill-ch)
+         solar-data-ch (get-new-site-data data-source err-ch kill-ch)
+         power-watts-ch (regulate-charge-rate location car-state-ch solar-data-ch err-ch kill-ch)
+         _ (set-charge-rate charger car power-watts-ch err-ch kill-ch)]
 
      (.addShutdownHook
       (Runtime/getRuntime)
@@ -71,7 +68,7 @@
          (println "Sending kill signal...")
          (async/>!! kill-ch true))))
 
-     (when-some [error (async/<!! error-ch)]
+     (when-some [error (async/<!! err-ch)]
        (let [stack-trace-string (with-out-str (clojure.stacktrace/print-stack-trace error))]
          (log/error stack-trace-string)
          (log/notify stack-trace-string))))))
