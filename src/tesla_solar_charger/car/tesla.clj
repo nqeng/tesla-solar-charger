@@ -64,7 +64,7 @@
     (set-charge-current car charge-rate-amps)))
 
 (defrecord Tesla []
-  car/Car
+  car/ICar
   (get-state [car] (get-state car))
   (get-vin [car] (:vin car))
   (get-name [car] "Tesla")

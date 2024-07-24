@@ -97,7 +97,7 @@
                         (do
                           (log/info log-prefix "Car entered and started charging")
                           (if (:is-override-active car-state)
-                            (>! charge-current-ch max-current-amps)
+                            
                             (>! charge-current-ch 0)))
 
                         (did-car-enter-site? site car-state last-car-state)

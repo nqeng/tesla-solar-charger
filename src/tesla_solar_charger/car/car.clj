@@ -3,7 +3,7 @@
     [tesla-solar-charger.utils :refer [minutes-between-times]])
   )
 
-(defprotocol Car
+(defprotocol ICar
   (get-vin [car])
   (get-name [car])
   (get-state [car])
