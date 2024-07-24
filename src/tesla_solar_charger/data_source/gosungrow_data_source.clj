@@ -1,4 +1,4 @@
-(ns tesla-solar-charger.implementations.site-data.gosungrow-data-source
+(ns tesla-solar-charger.data-source.gosungrow-data-source
   (:require
    [cheshire.core :as json]
    [tesla-solar-charger.interfaces.site-data :as Isite-data]

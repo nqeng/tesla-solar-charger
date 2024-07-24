@@ -1,4 +1,4 @@
-(ns tesla-solar-charger.implementations.site-data.dummy-data-source
+(ns tesla-solar-charger.data-source.dummy-data-source
   (:require
    [tesla-solar-charger.implementations.site-data.sungrow-site-data :refer [new-SungrowSiteData]]
    [tesla-solar-charger.interfaces.site :as Isite]

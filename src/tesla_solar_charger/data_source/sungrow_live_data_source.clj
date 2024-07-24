@@ -1,4 +1,4 @@
-(ns tesla-solar-charger.implementations.site-data.sungrow-live-data-source
+(ns tesla-solar-charger.data-source.sungrow-live-data-source
   (:require
    [etaoin.api :as e]
    [etaoin.keys :as k]

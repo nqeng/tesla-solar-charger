@@ -1,4 +1,4 @@
-(ns tesla-solar-charger.implementations.site-data.sungrow-api-data-source
+(ns tesla-solar-charger.data-source.sungrow-api-data-source
   (:require
    [tesla-solar-charger.utils :as utils]
    [clojure.string :as s]
