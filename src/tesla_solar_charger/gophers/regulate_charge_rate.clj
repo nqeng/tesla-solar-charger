@@ -74,11 +74,13 @@
                   (>! err-ch (ex-info "Input channel was closed" {:type :attribute-nil})))
                 (if (= ch car-state-ch)
                   (do
-                    (log/info log-prefix "Received car state")
                     (let [car-state val
                           last-car-state (:last-car-state state)
                           state (assoc state :last-car-state car-state)
                           max-current-amps (:max-charge-current-amps car-state)]
+                      (if (nil? last-car-state)
+                        (log/info log-prefix "Received first car state")
+                        (log/info log-prefix "Received car state"))
                       (cond
                         (and (did-car-stop-charging? car-state last-car-state)
                              (did-car-leave-location? location car-state last-car-state))
@@ -122,16 +124,18 @@
                           (>! output-ch 0))
 
                         :else
-                        (log/info log-prefix "No change to car state"))
+                        nil)
 
                       (recur state)))
 
                   (do
-                    (log/info log-prefix "Received solar data")
                     (let [data-point val
                           last-car-state (:last-car-state state)
                           last-data-point (:last-data-point state)
                           state (assoc state :last-data-point data-point)]
+                      (if (nil? last-data-point)
+                        (log/info log-prefix "Received first solar data")
+                        (log/info log-prefix "Received solar data"))
                       (cond
                         (and (some? last-data-point)
                              (= (:excess-power-watts data-point) (:excess-power-watts last-data-point)))
