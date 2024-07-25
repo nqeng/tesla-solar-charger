@@ -51,9 +51,3 @@
         minutes-to-target-percent-at-max-rate (* minutes-per-amp charge-rate-amps)]
     minutes-to-target-percent-at-max-rate))
 
-(defn is-newer?
-  [state1 state2]
-  (.isAfter (:timestamp state1) (:timestamp state2)))
-
-
-
