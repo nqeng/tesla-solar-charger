@@ -56,6 +56,8 @@
                                   max-charge-current-amps
                                   latitude
                                   longitude)]
+    (when (nil? state)
+      (throw (ex-info "No car state" {})))
     state))
 
 (defn restore-this-state

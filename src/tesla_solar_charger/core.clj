@@ -3,7 +3,7 @@
   (:require
    [clojure.tools.cli :refer [parse-opts]]
    [tesla-solar-charger.log :as log]
-   [tesla-solar-charger.gophers.get-car-state :refer [get-new-car-state]]
+   [tesla-solar-charger.gophers.get-car-state :refer [filter-new-car-state fetch-car-state get-new-car-state]]
    [tesla-solar-charger.gophers.set-charge-rate :refer [set-charge-rate]]
    [better-cond.core :refer [cond] :rename {cond better-cond}]
    [tesla-solar-charger.charger.three-phase-tesla-charger :refer [new-TeslaChargerThreePhase]]
@@ -12,8 +12,8 @@
    [tesla-solar-charger.gophers.utils :refer [sliding-buffer keep-last-value print-values]]
    [tesla-solar-charger.car.tesla :refer [new-Tesla]]
    [tesla-solar-charger.data-source.gosungrow-data-source :refer [new-GoSungrowDataSource]]
-   [tesla-solar-charger.gophers.get-site-data :refer [get-new-site-data]]
-   [clojure.core.async :as async]))
+   [tesla-solar-charger.gophers.get-site-data :refer [filter-new-solar-data fetch-solar-data get-new-site-data]]
+   [clojure.core.async :as async :refer [close!]]))
 
 (def cli-options
   ;; An option with a required argument
@@ -58,17 +58,27 @@
                                               ps-point)
          charger (new-TeslaChargerThreePhase)
          location {:latitude location-latitude :longitude location-longitude}
-         car-state-ch (get-new-car-state car err-ch kill-ch)
-         solar-data-ch (get-new-site-data data-source err-ch kill-ch)
-         current-amps-ch (regulate-charge-rate location car charger car-state-ch solar-data-ch err-ch kill-ch)
-         _ (set-charge-rate car charger current-amps-ch err-ch kill-ch)]
+         car-state-ch (fetch-car-state car kill-ch)
+         new-car-state-ch (filter-new-car-state car-state-ch kill-ch)
+         data-point-ch (fetch-solar-data data-source kill-ch)
+         new-data-point-ch (filter-new-solar-data data-point-ch kill-ch)
+         _ (print-values new-data-point-ch)
+         _ (print-values new-car-state-ch)
+         ;;car-state-ch (get-new-car-state car err-ch kill-ch)
+         ;;solar-data-ch (get-new-site-data data-source err-ch kill-ch)
+         current-amps-ch (regulate-charge-rate location car charger new-car-state-ch new-data-point-ch kill-ch)
+         #__ #_(set-charge-rate car charger current-amps-ch err-ch kill-ch)]
 
-     (.addShutdownHook
-      (Runtime/getRuntime)
-      (Thread.
-       (fn []
-         (println "Sending kill signal...")
-         (async/>!! kill-ch true))))
+     (Thread/sleep 60000)
+     (println "Sending kill signal...")
+     (close! kill-ch)
+
+     #_(.addShutdownHook
+        (Runtime/getRuntime)
+        (Thread.
+         (fn []
+           (println "Sending kill signal...")
+           (close! kill-ch))))
 
      (when-some [error (async/<!! err-ch)]
        (let [stack-trace-string (with-out-str (clojure.stacktrace/print-stack-trace error))]

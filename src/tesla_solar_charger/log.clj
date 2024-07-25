@@ -53,12 +53,6 @@
     (catch Exception e nil)
     (catch clojure.lang.ExceptionInfo e nil)))
 
-(defn log-sync
-  ([message-level prefix message]
-   (swap! log-message (fn [current-val] (log message-level prefix message) message)))
-  ([message-level message]
-   (log-sync message-level "Misc" message)))
-
 (def info (partial log :info))
 (def verbose (partial log :verbose))
 (def error (partial log :error))

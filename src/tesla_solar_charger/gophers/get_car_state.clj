@@ -19,6 +19,58 @@
   [car-state last-car-state]
   (.isAfter (:timestamp car-state) (:timestamp last-car-state)))
 
+(defn fetch-car-state
+  [car kill-ch]
+  (let [log-prefix "fetch-car-state"
+        output-ch (chan)]
+    (go
+      (log/info log-prefix "Process starting...")
+      (loop [sleep-for 0]
+        (let [result-ch (go
+                          (Thread/sleep sleep-for)
+                          (get-car-state car))
+              [val ch] (alts! [kill-ch result-ch])]
+          (if (= ch kill-ch)
+            (log/info log-prefix "Process dying...")
+            (let [{err :err car-state :val} val]
+              (if (some? err)
+                (do
+                  (log/error log-prefix (format "Failed to fetch car state; %s" (ex-message err)))
+                  (recur 10000))
+                (do
+                  (log/error "Fetched car state")
+                  (>! output-ch car-state)
+                  (recur 10000)))))))
+      (log/info log-prefix "Closing output channel...")
+      (close! output-ch)
+      (log/info log-prefix "Process died"))
+    output-ch))
+
+(defn filter-new-car-state
+  [input-ch kill-ch]
+  (let [log-prefix "filter-new-car-state"
+        output-ch (chan)]
+    (go
+      (log/info log-prefix "Process starting...")
+      (loop [last-car-state nil]
+        (let [[val ch] (alts! [kill-ch input-ch])]
+          (if (= ch kill-ch)
+            (log/info log-prefix "Process dying...")
+            (let [car-state val]
+              (if (and (some? last-car-state)
+                       (not (is-car-state-newer? car-state last-car-state)))
+                (do
+                  (log/info log-prefix "No new car state")
+                  (recur last-car-state))
+                (do
+                  (log/info log-prefix "Received new car state")
+                  (>! output-ch car-state)
+                  (recur car-state)))))))
+      (log/info log-prefix "Closing output channel...")
+      (close! output-ch)
+      (log/info log-prefix "Process died"))
+    output-ch))
+
 (defn get-new-car-state
   [car err-ch kill-ch]
   (let [log-prefix "get-new-car-state"
@@ -27,11 +79,14 @@
       (log/info log-prefix "Process starting...")
       (loop [sleep-for 0
              last-car-state nil]
-        (let [result-ch (go
-                          (log/info log-prefix (format "Sleeping for %dms" sleep-for))
-                          (Thread/sleep (* 1000 sleep-for))
-                          (get-car-state car))
-              [val ch] (alts! [kill-ch result-ch])]
+        (let [#_result-ch #_(go
+                              (log/info log-prefix (format "Sleeping for %dms" sleep-for))
+                              (Thread/sleep (* 1000 sleep-for))
+                              (get-car-state car))
+              [val ch] (alts! [kill-ch (go
+                                         (log/info log-prefix (format "Sleeping for %dms" sleep-for))
+                                         (Thread/sleep (* 1000 sleep-for))
+                                         (get-car-state car))])]
           (if (= ch kill-ch)
             (log/info log-prefix "Process dying...")
             (let [{err :err car-state :car-state} val]
@@ -39,21 +94,25 @@
                 (do
                   (log/error log-prefix (format "Failed to get car state; %s" (ex-message err)))
                   (recur 10 last-car-state))
-                (if (and (some? last-car-state) 
-                         (not (is-car-state-newer? car-state last-car-state)))
+                (cond
+
+                  (nil? last-car-state)
                   (do
-                    (log/verbose log-prefix "No new car state")
+                    (log/info "Received first car state")
+                    (>! output-ch car-state)
+                    (recur 30 car-state))
+
+                  (not (is-car-state-newer? car-state last-car-state))
+                  (do
+                    (log/info "No new car state available")
                     (recur 30 last-car-state))
+
+                  :else
                   (do
-                    (log/info log-prefix (format "New car state: %s" (into {} (take 3 car-state))))
-                    (let [success (>! output-ch car-state)]
-                      (if (not success)
-                        (do
-                          (log/error log-prefix "Output channel was closed")
-                          (>! err-ch (ex-info "Output channel was closed" {:type :channel-closed})))
-                        (do
-                          (log/verbose log-prefix "value -> channel")
-                          (recur car-state 30)))))))))))
+                    (log/info "Received new car state")
+                    (>! output-ch car-state)
+                    (recur 30 car-state))))))))
+
       (log/verbose log-prefix "Closing channel...")
       (close! output-ch)
       (log/verbose log-prefix "Process died"))

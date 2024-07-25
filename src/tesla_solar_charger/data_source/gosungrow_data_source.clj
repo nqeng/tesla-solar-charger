@@ -47,23 +47,18 @@
         rounded (round-minutes-down-to-interval time-now 5)
         start-timestamp (format-timestamp1 (.minusSeconds rounded (* 5 60)))
         end-timestamp (format-timestamp1 rounded)
-        data (-> (sh
-                  script-filepath
-                  ps-key
-                  ps-id
-                  excess-power-key
-                  (str 5)
-                  start-timestamp
-                  end-timestamp)
-                 :out
-                 json/parse-string
-                 (get "data"))
+        result (sh script-filepath ps-key ps-id excess-power-key (str 5) start-timestamp end-timestamp)
+        stdout (:out result)
+        json (json/parse-string stdout)
+        data (get json "data")
         data-points (->> data
                          (map second)
                          (map #(make-data-point-from-json % excess-power-key)))
         latest-point (->> data-points
                           (sort-by :timestamp)
                           last)]
+    (when (nil? latest-point)
+      (throw (ex-info "No data point found" {})))
     latest-point))
 
 (defrecord GoSungrowDataSource []

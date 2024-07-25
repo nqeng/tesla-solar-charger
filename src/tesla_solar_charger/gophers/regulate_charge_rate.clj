@@ -69,7 +69,7 @@
    (:charge-current-amps car-state)))
 
 (defn regulate-charge-rate
-  [location car charger car-state-ch solar-data-ch err-ch kill-ch]
+  [location car charger car-state-ch solar-data-ch kill-ch]
   (let [log-prefix "regulate-charge-rate"
         output-ch (chan (sliding-buffer 1))]
     (go
@@ -81,9 +81,7 @@
             (log/info log-prefix "Process dying...")
             (let [[val ch] (alts! [car-state-ch solar-data-ch])]
               (if (nil? val)
-                (do
-                  (log/error log-prefix "Input channel was closed")
-                  (>! err-ch (ex-info "Input channel was closed" {:type :attribute-nil})))
+                (log/error log-prefix "Input channel was closed")
                 (if (= ch car-state-ch)
                   (do
                     (let [car-state val
