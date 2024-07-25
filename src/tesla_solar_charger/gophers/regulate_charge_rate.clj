@@ -1,6 +1,7 @@
 (ns tesla-solar-charger.gophers.regulate-charge-rate
   (:require
    [tesla-solar-charger.log :as log]
+   [tesla-solar-charger.interfaces.regulator :as regulator]
    [tesla-solar-charger.haversine :refer [haversine]]
    [tesla-solar-charger.car.car :as car]
    [clojure.core.async :as async :refer [close! sliding-buffer chan alts! >! go]]
@@ -69,105 +70,45 @@
    (:charge-current-amps car-state)))
 
 (defn regulate-charge-rate
-  [location car charger car-state-ch solar-data-ch kill-ch]
+  [location car charger regulator car-state-ch solar-data-ch kill-ch]
   (let [log-prefix "regulate-charge-rate"
         output-ch (chan (sliding-buffer 1))]
     (go
       (log/info log-prefix "Process starting...")
-      (loop [state {:last-car-state nil
-                    :last-data-point nil}]
-        (let [[_ ch] (alts! [kill-ch] :default nil)]
+      (loop [last-car-state nil
+             last-data-point nil]
+        (let [[val ch] (alts! [kill-ch car-state-ch solar-data-ch])]
           (if (= ch kill-ch)
             (log/info log-prefix "Process dying...")
-            (let [[val ch] (alts! [car-state-ch solar-data-ch])]
-              (if (nil? val)
-                (log/error log-prefix "Input channel was closed")
-                (if (= ch car-state-ch)
-                  (do
-                    (let [car-state val
-                          last-car-state (:last-car-state state)
-                          state (assoc state :last-car-state car-state)
-                          max-charge-power-watts (charger/get-max-car-charge-power-watts charger car-state)]
-                      (if (nil? last-car-state)
-                        (log/info log-prefix "Received first car state")
-                        (log/info log-prefix "Received car state"))
-                      (cond
-                        (nil? last-car-state)
-                        (log/info "No previous car state")
-
-                        (and (did-car-stop-charging? car-state last-car-state)
-                             (did-car-leave-location? location car-state last-car-state))
-                        (do (log/info log-prefix "Car stopped charging and left")
-                            (>! output-ch max-charge-power-watts))
-
-                        (did-car-stop-charging? car-state last-car-state)
-                        (do
-                          (log/info log-prefix "Car stopped charging")
-                          (>! output-ch max-charge-power-watts))
-
-                        (did-car-leave-location? location car-state last-car-state)
-                        (log/info log-prefix "Car left")
-
-                        (and (did-car-enter-location? location car-state last-car-state)
-                             (did-car-start-charging? car-state last-car-state))
-                        (do
-                          (log/info log-prefix "Car entered and started charging")
-                          (if (:is-override-active car-state)
-                            (>! output-ch max-charge-power-watts)
-                            (>! output-ch 0)))
-
-                        (did-car-enter-location? location car-state last-car-state)
-                        (log/info log-prefix "Car entered")
-
-                        (did-car-start-charging? car-state last-car-state)
-                        (do
-                          (log/info log-prefix "Car started charging")
-                          (if (:is-override-active car-state)
-                            (>! output-ch max-charge-power-watts)
-                            (>! output-ch 0)))
-
-                        (did-override-turn-on? car-state last-car-state)
-                        (do
-                          (log/info log-prefix "Override turned on")
-                          (>! output-ch max-charge-power-watts))
-
-                        (did-override-turn-off? car-state last-car-state)
-                        (do
-                          (log/info log-prefix "Override turned off")
-                          (>! output-ch 0))
-
-                        :else
-                        (log/info log-prefix (make-car-state-message car car-state)))
-
-                      (recur state)))
-
+            (if (nil? val)
+              (log/error log-prefix "Input channel was closed")
+              (if (= ch car-state-ch)
+                (do
+                  (log/info log-prefix "Received new car state")
+                  (let [car-state val
+                        regulation (regulator/regulate-new-car-state
+                                    regulator
+                                    car-state
+                                    last-car-state
+                                    last-data-point)]
+                    (when (some? (:message regulation))
+                      (log/info (:message regulation)))
+                    (when (:should-set-charge-rate regulation)
+                      (>! output-ch (:new-charge-power-watts regulation)))
+                    (recur car-state last-data-point)))
+                (do
+                  (log/info log-prefix "Received new data point")
                   (let [data-point val
-                        last-car-state (:last-car-state state)
-                        last-data-point (:last-data-point state)
-                        state (assoc state :last-data-point data-point)]
-                    (if (nil? last-data-point)
-                      (log/info log-prefix "Received first solar data")
-                      (log/info log-prefix "Received solar data"))
-                    (cond
-                      (and (some? last-data-point)
-                           (= (:excess-power-watts data-point) (:excess-power-watts last-data-point)))
-                      (log/info log-prefix "No change to excess power")
-
-                      (nil? last-car-state)
-                      (log/info log-prefix "No car state")
-
-                      (not (is-car-charging-at-location? location last-car-state))
-                      (log/info log-prefix "Car is not charging at this location")
-
-                      (:is-override-active last-car-state)
-                      (log/info log-prefix "Override active")
-
-                      :else
-                      (let [charge-power-watts (charger/get-car-charge-power-watts charger last-car-state)
-                            excess-power-watts (:excess-power-watts data-point)
-                            new-charge-power-watts (calc-new-charge-power-watts charge-power-watts excess-power-watts 0 16 16)]
-                        (>! output-ch new-charge-power-watts)))
-                    (recur state))))))))
+                        regulation (regulator/regulate-new-data-point
+                                    regulator
+                                    data-point
+                                    last-data-point
+                                    last-car-state)]
+                    (when (some? (:message regulation))
+                      (log/info (:message regulation)))
+                    (when (:should-set-charge-rate regulation)
+                      (>! output-ch (:new-charge-power-watts regulation)))
+                    (recur last-car-state data-point))))))))
       (log/info log-prefix "Closing channel...")
       (close! output-ch)
       (log/info log-prefix "Process died"))
