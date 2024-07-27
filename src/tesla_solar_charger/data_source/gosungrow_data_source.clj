@@ -33,7 +33,7 @@
   [object excess-power-key]
   (let [time-string (get object "timestamp")
         time (.toInstant (.atZone (parse-timestamp1 time-string) (java.time.ZoneId/systemDefault)))
-        excess-power-watts (get-in object ["points" excess-power-key])
+        excess-power-watts (float (- (get-in object ["points" excess-power-key])))
         data-point (data-source/make-data-point time excess-power-watts)]
     data-point))
 

@@ -18,6 +18,12 @@
     (catch Exception e
       {:val nil :err e})))
 
+(defn make-data-point-message
+  [data-point]
+  (format
+   "Excess power is %.2fW"
+   (:excess-power-watts data-point)))
+
 (defn fetch-solar-data
   [data-source kill-ch]
   (let [log-prefix "fetch-solar-data"
@@ -63,6 +69,7 @@
                   (recur last-data-point))
                 (do
                   (log/info log-prefix "Received new solar data")
+                  (log/info log-prefix (make-data-point-message data-point))
                   (>! output-ch data-point)
                   (recur data-point)))))))
       (log/info log-prefix "Closing output channel...")

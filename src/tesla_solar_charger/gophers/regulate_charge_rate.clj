@@ -90,16 +90,6 @@
       :else
       (make-regulation new-charge-power-watts (format "Excess power is %.2fW" excess-power-watts)))))
 
-(defn make-car-state-message
-  [car car-state]
-  (format
-   "%s is at (%.2f, %.2f) (%s) at %sA"
-   (car/get-name car)
-   (:latitude car-state)
-   (:longitude car-state)
-   (if (:is-charging car-state) "charging" "not charging")
-   (:charge-current-amps car-state)))
-
 (defn regulate-charge-rate
   [location car charger regulator car-state-ch solar-data-ch kill-ch]
   (let [log-prefix "regulate-charge-rate"

@@ -22,11 +22,10 @@
 (defn make-car-state-message
   [car car-state]
   (format
-   "%s is at %s (%s) at %sA"
+   "%s is at %s (%s)"
    (car/get-name car)
    (:readable-location-name car-state)
-   (if (:is-charging car-state) "charging" "not charging")
-   (:charge-current-amps car-state)))
+   (if (:is-charging car-state) (format "charging at %dA" (:charge-current-amps car-state)) "not charging")))
 
 (defn fetch-car-state
   [car kill-ch]
@@ -47,8 +46,7 @@
                   (log/error log-prefix (format "Failed to fetch car state; %s" (ex-message err)))
                   (recur 10000))
                 (do
-                  (log/error "Fetched car state")
-                  (log/info log-prefix (make-car-state-message car car-state))
+                  (log/info log-prefix "Fetched car state")
                   (>! output-ch car-state)
                   (recur 10000)))))))
       (log/info log-prefix "Closing output channel...")
@@ -57,7 +55,7 @@
     output-ch))
 
 (defn filter-new-car-state
-  [input-ch kill-ch]
+  [car input-ch kill-ch]
   (let [log-prefix "filter-new-car-state"
         output-ch (chan)]
     (go
@@ -74,6 +72,7 @@
                   (recur last-car-state))
                 (do
                   (log/info log-prefix "Received new car state")
+                  (log/info log-prefix (make-car-state-message car car-state))
                   (>! output-ch car-state)
                   (recur car-state)))))))
       (log/info log-prefix "Closing output channel...")
