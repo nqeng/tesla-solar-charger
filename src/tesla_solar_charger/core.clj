@@ -49,9 +49,10 @@
          ps-point (System/getenv "GOSUNGROW_PS_POINT")
          location-latitude (parse-double (System/getenv "LOCATION_LATITUDE"))
          location-longitude (parse-double (System/getenv "LOCATION_LONGITUDE"))
+         locationiq-auth-token (System/getenv "LOCATIONIQ_AUTH_TOKEN")
          err-ch (async/chan (async/dropping-buffer 1))
          kill-ch (async/chan)
-         car (new-Tesla tesla-vin tessie-auth-token)
+         car (new-Tesla tesla-vin tessie-auth-token locationiq-auth-token)
          data-source (new-GoSungrowDataSource script-filepath
                                               ps-key
                                               ps-id
@@ -66,7 +67,7 @@
          _ (print-values new-car-state-ch)
          ;;car-state-ch (get-new-car-state car err-ch kill-ch)
          ;;solar-data-ch (get-new-site-data data-source err-ch kill-ch)
-         current-amps-ch (regulate-charge-rate location car charger new-car-state-ch new-data-point-ch kill-ch)
+         ;;current-amps-ch (regulate-charge-rate location car charger new-car-state-ch new-data-point-ch kill-ch)
          #__ #_(set-charge-rate car charger current-amps-ch err-ch kill-ch)]
 
      (Thread/sleep 60000)
@@ -80,7 +81,7 @@
            (println "Sending kill signal...")
            (close! kill-ch))))
 
-     (when-some [error (async/<!! err-ch)]
+     #_(when-some [error (async/<!! err-ch)]
        (let [stack-trace-string (with-out-str (clojure.stacktrace/print-stack-trace error))]
          (log/error stack-trace-string)
          (log/notify stack-trace-string))))))

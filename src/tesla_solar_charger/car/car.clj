@@ -20,7 +20,8 @@
    charge-current-amps
    max-charge-current-amps
    latitude
-   longitude]
+   longitude
+   readable-location-name]
   {:timestamp timestamp
    :is-connected is-connected
    :is-charging is-charging
@@ -30,7 +31,8 @@
    :max-charge-current-amps max-charge-current-amps
    :charge-limit-percent charge-limit-percent
    :latitude latitude
-   :longitude longitude})
+   :longitude longitude
+   :readable-location-name readable-location-name})
 
 (defn get-minutes-until-charge-percent [state target-percent]
   (let [charge-limit-percent (:charge-limit-percent state)

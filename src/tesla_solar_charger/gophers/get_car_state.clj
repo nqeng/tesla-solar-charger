@@ -19,6 +19,15 @@
   [car-state last-car-state]
   (.isAfter (:timestamp car-state) (:timestamp last-car-state)))
 
+(defn make-car-state-message
+  [car car-state]
+  (format
+   "%s is at %s (%s) at %sA"
+   (car/get-name car)
+   (:readable-location-name car-state)
+   (if (:is-charging car-state) "charging" "not charging")
+   (:charge-current-amps car-state)))
+
 (defn fetch-car-state
   [car kill-ch]
   (let [log-prefix "fetch-car-state"
@@ -39,6 +48,7 @@
                   (recur 10000))
                 (do
                   (log/error "Fetched car state")
+                  (log/info log-prefix (make-car-state-message car car-state))
                   (>! output-ch car-state)
                   (recur 10000)))))))
       (log/info log-prefix "Closing output channel...")
@@ -98,18 +108,19 @@
 
                   (nil? last-car-state)
                   (do
-                    (log/info "Received first car state")
+                    (log/info log-prefix "Received first car state")
                     (>! output-ch car-state)
                     (recur 30 car-state))
 
                   (not (is-car-state-newer? car-state last-car-state))
                   (do
-                    (log/info "No new car state available")
+                    (log/info log-prefix "No new car state available")
                     (recur 30 last-car-state))
 
                   :else
                   (do
-                    (log/info "Received new car state")
+                    (log/info log-prefix "Received new car state")
+                    (log/info log-prefix (make-car-state-message car car-state))
                     (>! output-ch car-state)
                     (recur 30 car-state))))))))
 

@@ -6,7 +6,8 @@
    [tesla-solar-charger.car.car :as car]
    [clojure.core.async :as async :refer [close! sliding-buffer chan alts! >! go]]
    [tesla-solar-charger.utils :as utils]
-   [tesla-solar-charger.charger.charger :as charger]))
+   [tesla-solar-charger.charger.charger :as charger]
+   [cheshire.core :as json]))
 
 (def distance-between-geo-points-kilometers haversine)
 
@@ -58,6 +59,36 @@
 (defn did-override-turn-on?
   [car-state last-car-state]
   (and (:is-override-active car-state) (not (:is-override-active last-car-state))))
+
+(defn make-regulation
+  [new-power-watts message]
+  {:new-charge-power-watts new-power-watts
+   :message message})
+
+(defn regulate-new-data-point
+  [charger location data-point last-data-point last-car-state]
+  (let [excess-power-watts (:excess-power-watts last-data-point)
+        charge-power-watts (charger/get-car-charge-power-watts charger last-car-state)
+        new-charge-power-watts (calc-new-charge-power-watts charge-power-watts excess-power-watts 0 16 16)]
+    (cond
+      (nil? last-car-state)
+      (make-regulation nil "No car state")
+
+      (not (is-car-charging-at-location? location last-car-state))
+      (make-regulation nil "Car is not charging at this location")
+
+      (:is-override-active last-car-state)
+      (make-regulation nil "Override is active")
+
+      (and (some? last-data-point)
+           (= excess-power-watts (:excess-power-watts last-data-point)))
+      (make-regulation nil "No change to excess power")
+
+      (= new-charge-power-watts charge-power-watts)
+      (make-regulation nil "No change to charge rate")
+
+      :else
+      (make-regulation new-charge-power-watts (format "Excess power is %.2fW" excess-power-watts)))))
 
 (defn make-car-state-message
   [car car-state]

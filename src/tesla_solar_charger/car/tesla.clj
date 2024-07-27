@@ -10,6 +10,21 @@
 (def power-to-current-1-phase 231.25)
 (def power-to-current-2-phase 462.5)
 
+(defn get-readable-location-name
+  [latitude longitude auth-token]
+  (let [url "https://us1.locationiq.com/v1/reverse"
+        query-params {:lat (str latitude)
+                      :lon (str longitude)
+                      :format "json"
+                      :key auth-token}
+        response (client/get url {:query-params query-params :accept :json})
+        body (:body response)
+        json (json/parse-string body)
+        readable-name (get json "display_name")]
+    (when (nil? readable-name)
+      (throw (ex-info "Could not get readable place name" {})))
+    readable-name))
+
 (defn set-charge-current
   [car new-current-amps]
   (let [vin (:vin car)
@@ -27,9 +42,10 @@
 (defn get-state
   [car]
   (let [vin (:vin car)
-        auth-token (:auth-token car)
+        tessie-auth-token (:auth-token car)
+        locationiq-auth-token (:locationiq-auth-token car)
         url (str "https://api.tessie.com/" vin "/state")
-        headers {:oauth-token auth-token :accept :json}
+        headers {:oauth-token tessie-auth-token :accept :json}
         response (client/get url headers)
         json (json/parse-string (:body response))
         drive-state (get json "drive_state")
@@ -46,6 +62,7 @@
         max-charge-current-amps (get charge-state "charge_current_request_max")
         latitude (get drive-state "latitude")
         longitude (get drive-state "longitude")
+        readable-location-name (get-readable-location-name latitude longitude locationiq-auth-token)
         state (car/make-car-state timestamp
                                   is-connected
                                   is-charging
@@ -55,7 +72,8 @@
                                   charge-current-amps
                                   max-charge-current-amps
                                   latitude
-                                  longitude)]
+                                  longitude
+                                  readable-location-name)]
     (when (nil? state)
       (throw (ex-info "No car state" {})))
     state))
@@ -74,9 +92,10 @@
   (restore-this-state [car state] (restore-this-state car state)))
 
 (defn new-Tesla
-  [vin auth-token]
+  [vin tessie-auth-token locationiq-auth-token]
   (let [the-map {:vin vin
-                 :auth-token auth-token}
+                 :auth-token tessie-auth-token
+                 :locationiq-auth-token locationiq-auth-token}
         defaults {}]
     (map->Tesla (merge defaults the-map))))
 
