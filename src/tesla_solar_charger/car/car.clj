@@ -1,7 +1,5 @@
 (ns tesla-solar-charger.car.car
-  (:require
-    [tesla-solar-charger.utils :refer [minutes-between-times]])
-  )
+  (:require))
 
 (defprotocol ICar
   (get-vin [car])
@@ -33,23 +31,4 @@
    :latitude latitude
    :longitude longitude
    :readable-location-name readable-location-name})
-
-(defn get-minutes-until-charge-percent [state target-percent]
-  (let [charge-limit-percent (:charge-limit-percent state)
-        minutes-to-full-charge (:minutes-to-full-charge state)
-        minutes-per-percent (/ minutes-to-full-charge charge-limit-percent)
-        minutes-to-target-percent (* minutes-per-percent target-percent)]
-    minutes-to-target-percent))
-
-(defn will-reach-charge-percent-by-time? [state target-percent target-time]
-  (< (get-minutes-until-charge-percent state target-percent)
-     (minutes-between-times (:timestamp state) target-time)))
-
-(defn get-minutes-until-charge-percent-at-max-rate [state target-percent]
-  (let [charge-rate-amps (:charge-current-amps state)
-        max-charge-rate-amps (:max-charge-current-amps state)
-        minutes-to-target-percent (get-minutes-until-charge-percent state target-percent)
-        minutes-per-amp (/ minutes-to-target-percent max-charge-rate-amps)
-        minutes-to-target-percent-at-max-rate (* minutes-per-amp charge-rate-amps)]
-    minutes-to-target-percent-at-max-rate))
 
