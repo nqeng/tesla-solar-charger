@@ -43,7 +43,7 @@
                   (log/error log-prefix (format "Failed to fetch solar data; %s" (ex-message err)))
                   (recur 10000))
                 (do
-                  (log/info log-prefix "Fetched solar data")
+                  (log/verbose log-prefix "Fetched solar data")
                   (>! output-ch data-point)
                   (recur 10000)))))))
       (log/info log-prefix "Closing output channel...")
@@ -65,11 +65,10 @@
               (if (and (some? last-data-point)
                        (not (is-data-point-newer? data-point last-data-point)))
                 (do
-                  (log/info log-prefix "No new solar data")
+                  (log/verbose log-prefix "No new solar data")
                   (recur last-data-point))
                 (do
-                  (log/info log-prefix "Received new solar data")
-                  (log/info log-prefix (make-data-point-message data-point))
+                  (log/info log-prefix (format "Received new solar data: %s" (make-data-point-message data-point)))
                   (>! output-ch data-point)
                   (recur data-point)))))))
       (log/info log-prefix "Closing output channel...")

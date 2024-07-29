@@ -85,92 +85,8 @@
         minutes-left-to-charge (utils/minutes-between-times (:timestamp car-state) target-time)]
     (< minutes-left-to-charge minutes-to-target-percent-at-max-rate)))
 
-(defn make-regulation
-  [new-charge-power-watts is-override-active message]
-  {:new-charge-power-watts new-charge-power-watts
-   :is-override-active is-override-active
-   :message message})
-
-(defn regulate-new-data-point
-  [charger location new-data-point last-data-point last-car-state]
-  (let [is-override-active (:is-override-active last-car-state)
-        excess-power-watts (:excess-power-watts new-data-point)
-        last-excess-power-watts (:excess-power-watts last-data-point)
-        charge-power-watts (charger/get-car-charge-power-watts charger last-car-state)
-        new-charge-power-watts (calc-new-charge-power-watts charge-power-watts excess-power-watts 0 16 16)]
-    (cond
-      (nil? last-car-state)
-      (make-regulation charge-power-watts is-override-active "No car state")
-
-      (not (is-car-charging-at-location? location last-car-state))
-      (make-regulation charge-power-watts is-override-active "Car is not charging at this location")
-
-      (:is-override-active last-car-state)
-      (make-regulation charge-power-watts is-override-active "Override is active")
-
-      (and (some? last-data-point) (= excess-power-watts last-excess-power-watts))
-      (make-regulation charge-power-watts is-override-active "No change to excess power")
-
-      (= new-charge-power-watts charge-power-watts)
-      (make-regulation charge-power-watts is-override-active "No change to charge rate")
-
-      :else
-      (make-regulation new-charge-power-watts is-override-active (format "Excess power is %.2fW" excess-power-watts)))))
-
-(defn regulate-new-car-state
-  [charger location new-car-state last-car-state last-data-point target-time target-percent]
-  (let [is-override-active (:is-override-active new-car-state)
-        charge-power-watts (charger/get-car-charge-power-watts charger new-car-state)
-        max-charge-power-watts (charger/get-max-car-charge-power-watts charger new-car-state)]
-    (cond
-      (nil? last-car-state)
-      (make-regulation charge-power-watts is-override-active "No previous car state")
-
-      (and (did-car-stop-charging? new-car-state last-car-state)
-           (did-car-leave-location? location new-car-state last-car-state))
-      (make-regulation nil nil "Car stopped charging and left")
-
-      (did-car-stop-charging? new-car-state last-car-state)
-      (make-regulation nil nil "Car stopped charging")
-
-      (did-car-leave-location? location new-car-state last-car-state)
-      (make-regulation nil nil "Car left")
-
-      (and (did-car-enter-location? location new-car-state last-car-state)
-           (did-car-start-charging? new-car-state last-car-state)
-           is-override-active)
-      (make-regulation max-charge-power-watts nil "Car entered and started charging with override")
-
-      (and (did-car-enter-location? location new-car-state last-car-state)
-           (did-car-start-charging? new-car-state last-car-state))
-      (make-regulation 0 nil "Car entered and started charging")
-
-      (did-car-enter-location? location new-car-state last-car-state)
-      (make-regulation nil nil "Car entered")
-
-      (and (did-car-start-charging? new-car-state last-car-state)
-           is-override-active)
-      (make-regulation max-charge-power-watts nil "Car started charging with override")
-
-      (did-car-start-charging? new-car-state last-car-state)
-      (make-regulation 0 nil "Car started charging")
-
-      (did-override-turn-on? new-car-state last-car-state)
-      (make-regulation max-charge-power-watts nil "Override turned on")
-
-      (did-override-turn-off? new-car-state last-car-state)
-      (make-regulation 0 nil "Override turned off")
-
-      (and (not (:is-override-active new-car-state))
-           (not (should-override-to-reach-target? last-car-state target-percent target-time))
-           (should-override-to-reach-target? new-car-state target-percent target-time))
-      (make-regulation max-charge-power-watts nil (format "Overriding to reach %d%% by %s" target-percent target-time))
-
-      :else
-      (make-regulation nil nil "No action"))))
-
 (defn regulate-charge-rate
-  [location car charger regulator car-state-ch solar-data-ch charge-power-ch override-ch kill-ch]
+  [location charger car-state-ch solar-data-ch charge-power-ch override-ch kill-ch target-percent target-time]
   (let [log-prefix "regulate-charge-rate"]
     (go
       (log/info log-prefix "Process starting...")
@@ -186,7 +102,6 @@
                   (log/info log-prefix "Received new car state")
                   (let [car-state val
                         is-override-active (:is-override-active car-state)
-                        charge-power-watts (charger/get-car-charge-power-watts charger car-state)
                         max-charge-power-watts (charger/get-max-car-charge-power-watts charger car-state)]
                     (cond
                       (nil? last-car-state)
@@ -214,15 +129,15 @@
                            (did-car-start-charging? car-state last-car-state)
                            is-override-active)
                       (do
-                        (>! charge-power-ch max-charge-power-watts)
                         (log/info log-prefix "Car entered and started charging with override")
+                        (>! charge-power-ch max-charge-power-watts)
                         (recur car-state last-data-point))
 
                       (and (did-car-enter-location? location car-state last-car-state)
                            (did-car-start-charging? car-state last-car-state))
                       (do
-                        (>! charge-power-ch 0)
                         (log/info log-prefix "Car entered and started charging")
+                        (>! charge-power-ch 0)
                         (recur car-state last-data-point))
 
                       (did-car-enter-location? location car-state last-car-state)
@@ -233,61 +148,77 @@
                       (and (did-car-start-charging? car-state last-car-state)
                            is-override-active)
                       (do
-                        (>! charge-power-ch max-charge-power-watts)
                         (log/info log-prefix "Car started charging with override")
+                        (>! charge-power-ch max-charge-power-watts)
                         (recur car-state last-data-point))
 
                       (did-car-start-charging? car-state last-car-state)
                       (do
-                        (>! charge-power-ch 0)
                         (log/info log-prefix "Car started charging")
+                        (>! charge-power-ch 0)
                         (recur car-state last-data-point))
 
                       (did-override-turn-on? car-state last-car-state)
                       (do
-                        (>! charge-power-ch max-charge-power-watts)
                         (log/info log-prefix "Override turned on")
+                        (>! charge-power-ch max-charge-power-watts)
                         (recur car-state last-data-point))
 
                       (did-override-turn-off? car-state last-car-state)
                       (do
-                        (>! charge-power-ch 0)
                         (log/info log-prefix "Override turned off")
+                        (>! charge-power-ch 0)
                         (recur car-state last-data-point))
 
                       (and (not (:is-override-active car-state))
                            (not (should-override-to-reach-target? last-car-state target-percent target-time))
                            (should-override-to-reach-target? car-state target-percent target-time))
-                      (make-regulation max-charge-power-watts nil (format "Overriding to reach %d%% by %s" target-percent target-time))
+                      (do
+                        (log/info log-prefix (format "Overriding to reach %d%% by %s" target-percent target-time))
+                        (>! override-ch true)
+                        (>! charge-power-ch max-charge-power-watts))
 
                       :else
-                      (make-regulation nil nil "No action")))
-                  #_(let [car-state val
-                          regulation (regulator/regulate-new-car-state
-                                      regulator
-                                      car-state
-                                      last-car-state
-                                      last-data-point)
-                          message (:message regulation)
-                          new-charge-power-watts (:new-charge-power-watts regulation)]
-                      (when (some? message)
-                        (log/info message))
-                      (when (some? new-charge-power-watts)
-                        (>! output-ch new-charge-power-watts))
-                      (recur car-state last-data-point)))
+                      (do
+                        (log/info log-prefix "No action")
+                        (recur car-state last-data-point)))))
                 (do
                   (log/info log-prefix "Received new data point")
                   (let [data-point val
-                        regulation (regulator/regulate-new-data-point
-                                    regulator
-                                    data-point
-                                    last-data-point
-                                    last-car-state)
-                        message (:message regulation)
-                        new-charge-power-watts (:new-charge-power-watts regulation)]
-                    (when (some? message)
-                      (log/info message))
-                    (when (some? new-charge-power-watts)
-                      (>! output-ch new-charge-power-watts))
-                    (recur last-car-state data-point))))))))
+                        excess-power-watts (:excess-power-watts data-point)
+                        last-excess-power-watts (:excess-power-watts last-data-point)
+                        charge-power-watts (charger/get-car-charge-power-watts charger last-car-state)
+                        new-charge-power-watts (calc-new-charge-power-watts charge-power-watts excess-power-watts 0 16 16)]
+                    (cond
+                      (nil? last-car-state)
+                      (do
+                        (log/info log-prefix "No car state")
+                        (recur last-car-state data-point))
+
+                      (not (is-car-charging-at-location? location last-car-state))
+                      (do
+                        (log/info "Car is not charging at this location")
+                        (recur last-car-state data-point))
+
+                      (:is-override-active last-car-state)
+                      (do
+                        (log/info log-prefix "Override is active")
+                        (recur last-car-state data-point))
+
+                      (and (some? last-data-point) (= excess-power-watts last-excess-power-watts))
+                      (do
+                        (log/info log-prefix "No change to excess power")
+                        (recur last-car-state data-point))
+
+                      (= new-charge-power-watts charge-power-watts)
+                      (do
+                        (log/info log-prefix "No change to charge rate")
+                        (recur last-car-state data-point))
+
+                      :else
+                      (do
+                        (log/info log-prefix (format "Excess power is %.2fW" excess-power-watts))
+                        (>! charge-power-ch new-charge-power-watts)
+                        (recur last-car-state data-point))))))))))
+
       (log/info log-prefix "Process died"))))

@@ -46,7 +46,7 @@
                   (log/error log-prefix (format "Failed to fetch car state; %s" (ex-message err)))
                   (recur 10000))
                 (do
-                  (log/info log-prefix "Fetched car state")
+                  (log/verbose log-prefix "Fetched car state")
                   (>! output-ch car-state)
                   (recur 10000)))))))
       (log/info log-prefix "Closing output channel...")
@@ -68,11 +68,10 @@
               (if (and (some? last-car-state)
                        (not (is-car-state-newer? car-state last-car-state)))
                 (do
-                  (log/info log-prefix "No new car state")
+                  (log/verbose log-prefix "No new car state")
                   (recur last-car-state))
                 (do
-                  (log/info log-prefix "Received new car state")
-                  (log/info log-prefix (make-car-state-message car car-state))
+                  (log/info log-prefix (format "Received new car state: %s" (make-car-state-message car car-state)))
                   (>! output-ch car-state)
                   (recur car-state)))))))
       (log/info log-prefix "Closing output channel...")

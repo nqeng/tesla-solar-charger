@@ -4,16 +4,16 @@
    [clojure.tools.cli :refer [parse-opts]]
    [tesla-solar-charger.log :as log]
    [tesla-solar-charger.gophers.get-car-state :refer [filter-new-car-state fetch-car-state get-new-car-state]]
-   [tesla-solar-charger.gophers.set-charge-rate :refer [set-charge-rate]]
+   [tesla-solar-charger.gophers.set-charge-rate :refer [set-charge-rate set-override]]
    [better-cond.core :refer [cond] :rename {cond better-cond}]
    [tesla-solar-charger.charger.three-phase-tesla-charger :refer [new-TeslaChargerThreePhase]]
    [tesla-solar-charger.utils :as utils]
    [tesla-solar-charger.gophers.regulate-charge-rate :refer [regulate-charge-rate]]
-   [tesla-solar-charger.gophers.utils :refer [sliding-buffer keep-last-value print-values]]
+   [tesla-solar-charger.gophers.utils :refer [sliding-buffer keep-last-value print-values] :rename {sliding-buffer my-sliding-buffer}]
    [tesla-solar-charger.car.tesla :refer [new-Tesla]]
    [tesla-solar-charger.data-source.gosungrow-data-source :refer [new-GoSungrowDataSource]]
    [tesla-solar-charger.gophers.get-site-data :refer [filter-new-solar-data fetch-solar-data get-new-site-data]]
-   [clojure.core.async :as async :refer [close!]]))
+   [clojure.core.async :as async :refer [close! chan sliding-buffer]]))
 
 (def cli-options
   ;; An option with a required argument
@@ -39,7 +39,7 @@
                        :log-level)]
 
    :do (log/set-log-level log-level)
-   :do (log/info "Starting...")
+   :do (log/info "[Main]" "Starting...")
 
    (let [tesla-vin (System/getenv "TESLA_VIN")
          tessie-auth-token (System/getenv "TESSIE_AUTH_TOKEN")
@@ -50,7 +50,6 @@
          location-latitude (parse-double (System/getenv "LOCATION_LATITUDE"))
          location-longitude (parse-double (System/getenv "LOCATION_LONGITUDE"))
          locationiq-auth-token (System/getenv "LOCATIONIQ_AUTH_TOKEN")
-         err-ch (async/chan (async/dropping-buffer 1))
          kill-ch (async/chan)
          car (new-Tesla tesla-vin tessie-auth-token locationiq-auth-token)
          data-source (new-GoSungrowDataSource script-filepath
@@ -63,15 +62,18 @@
          new-car-state-ch (filter-new-car-state car car-state-ch kill-ch)
          data-point-ch (fetch-solar-data data-source kill-ch)
          new-data-point-ch (filter-new-solar-data data-point-ch kill-ch)
-         _ (sliding-buffer new-data-point-ch 1)
-         _ (sliding-buffer new-car-state-ch 1)
-         ;;car-state-ch (get-new-car-state car err-ch kill-ch)
-         ;;solar-data-ch (get-new-site-data data-source err-ch kill-ch)
-         ;;current-amps-ch (regulate-charge-rate location car charger new-car-state-ch new-data-point-ch kill-ch)
-         #__ #_(set-charge-rate car charger current-amps-ch err-ch kill-ch)]
+         _ (my-sliding-buffer new-data-point-ch 1)
+         _ (my-sliding-buffer new-car-state-ch 1)
+         charge-power-ch (chan (sliding-buffer 1))
+         override-ch (chan (sliding-buffer 1))
+         target-percent 80
+         target-time (utils/time-now)
+         _ (regulate-charge-rate location charger new-car-state-ch new-data-point-ch charge-power-ch override-ch kill-ch target-percent target-time)
+         _ (set-override car override-ch kill-ch)
+         _ (set-charge-rate car charger charge-power-ch kill-ch)]
 
      (Thread/sleep 60000)
-     (println "Sending kill signal...")
+     (log/info "[Main]" "Sending kill signal...")
      (close! kill-ch)
 
      #_(.addShutdownHook
@@ -82,7 +84,7 @@
            (close! kill-ch))))
 
      #_(when-some [error (async/<!! err-ch)]
-       (let [stack-trace-string (with-out-str (clojure.stacktrace/print-stack-trace error))]
-         (log/error stack-trace-string)
-         (log/notify stack-trace-string))))))
+         (let [stack-trace-string (with-out-str (clojure.stacktrace/print-stack-trace error))]
+           (log/error stack-trace-string)
+           (log/notify stack-trace-string))))))
 

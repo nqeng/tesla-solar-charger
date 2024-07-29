@@ -1,11 +1,12 @@
-(ns tesla-solar-charger.car.car
-  (:require))
+(ns tesla-solar-charger.car.car)
 
 (defprotocol ICar
   (get-vin [car])
   (get-name [car])
   (get-state [car])
   (set-charge-current [car new-charge-rate-amps])
+  (turn-override-on [car])
+  (turn-override-off [car])
   (restore-this-state [car state-to-restore]))
 
 (defn make-car-state

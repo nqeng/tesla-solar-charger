@@ -20,7 +20,7 @@
                               log-file)]
     log-file-path))
 
-(def default-log-level :verbose)
+(def default-log-level :info)
 
 (def log-levels {:verbose #{:error :verbose :info}
                  :info #{:error :info}

@@ -25,6 +25,32 @@
       (throw (ex-info "Could not get readable place name" {})))
     readable-name))
 
+(defn turn-override-off
+  [car]
+  (let [vin (:vin car)
+        auth-token (:auth-token car)
+        url (str "https://api.tessie.com/" vin "/command/disable_valet")
+        query-params {:retry-duration "40"
+                      :wait-for-completion "true"}
+        headers {:oauth-token auth-token
+                 :accept :json
+                 :query-params query-params}]
+    (client/get url headers)
+    nil))
+
+(defn turn-override-on
+  [car]
+  (let [vin (:vin car)
+        auth-token (:auth-token car)
+        url (str "https://api.tessie.com/" vin "/command/enable_valet")
+        query-params {:retry-duration "40"
+                      :wait-for-completion "true"}
+        headers {:oauth-token auth-token
+                 :accept :json
+                 :query-params query-params}]
+    (client/get url headers)
+    nil))
+
 (defn set-charge-current
   [car new-current-amps]
   (let [vin (:vin car)
