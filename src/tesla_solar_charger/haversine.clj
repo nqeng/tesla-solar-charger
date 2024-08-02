@@ -21,3 +21,8 @@
         a (+ (* (Math/sin (/ dlat 2)) (Math/sin (/ dlat 2))) (* (Math/sin (/ dlon 2)) (Math/sin (/ dlon 2)) (Math/cos lat1) (Math/cos lat2)))]
     (* R 2 (Math/asin (Math/sqrt a)))))
 
+(def distance-between-geo-points-kilometers haversine)
+
+(defn distance-between-geo-points-meters
+  [lat1 lng1 lat2 lng2]
+  (* 1000 (distance-between-geo-points-kilometers {:lng lng1 :lat lat1} {:lng lng2 :lat lat2})))

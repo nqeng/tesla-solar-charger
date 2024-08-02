@@ -1,12 +1,11 @@
 (ns tesla-solar-charger.gophers.set-charge-rate
   (:require
    [tesla-solar-charger.log :as log]
-   [clojure.core.async :refer [>! go alts!]]
-   [tesla-solar-charger.charger.charger :as charger]
-   [tesla-solar-charger.car.car :as car]))
+   [tesla-solar-charger.car-charge-setter.car-charge-setter :refer [set-charge-power]]
+   [clojure.core.async :refer [>! go alts!]]))
 
 (defn set-charge-rate
-  [car charger input-ch kill-ch]
+  [charge-setter input-ch kill-ch]
   (let [log-prefix "set-charge-rate"]
     (go
       (log/info log-prefix "Process starting...")
@@ -20,7 +19,7 @@
                 (do
                   (try
                     (log/info log-prefix (format "Setting charge rate to %.2fW..." power-watts))
-                    (charger/set-car-charge-power-watts charger car power-watts)
+                    (set-charge-power charge-setter power-watts)
                     (log/info log-prefix "Successfully set charge rate")
                     (catch clojure.lang.ExceptionInfo e
                       (log/error log-prefix (format "Failed to set charge rate; %s" (ex-message e))))
@@ -29,7 +28,7 @@
                   (recur)))))))
       (log/info log-prefix "Process died"))))
 
-(defn set-override
+#_(defn set-override
   [car input-ch kill-ch]
   (let [log-prefix "set-override"]
     (go

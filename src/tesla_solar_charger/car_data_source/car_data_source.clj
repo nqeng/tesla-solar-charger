@@ -1,13 +1,7 @@
-(ns tesla-solar-charger.car.car)
+(ns tesla-solar-charger.car-data-source.car-data-source)
 
-(defprotocol ICar
-  (get-vin [car])
-  (get-name [car])
-  (get-state [car])
-  (set-charge-current [car new-charge-rate-amps])
-  (turn-override-on [car])
-  (turn-override-off [car])
-  (restore-this-state [car state-to-restore]))
+(defprotocol ICarDataSource
+  (get-latest-car-state [data-source]))
 
 (defn make-car-state
   [timestamp
@@ -16,8 +10,8 @@
    is-override-active
    charge-limit-percent
    minutes-to-full-charge
-   charge-current-amps
-   max-charge-current-amps
+   charge-power-watts
+   max-charge-power-watts
    latitude
    longitude
    readable-location-name]
@@ -26,8 +20,8 @@
    :is-charging is-charging
    :is-override-active is-override-active
    :minutes-to-full-charge minutes-to-full-charge
-   :charge-current-amps charge-current-amps
-   :max-charge-current-amps max-charge-current-amps
+   :charge-power-watts charge-power-watts
+   :max-charge-power-watts max-charge-power-watts
    :charge-limit-percent charge-limit-percent
    :latitude latitude
    :longitude longitude

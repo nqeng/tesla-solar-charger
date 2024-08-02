@@ -24,10 +24,9 @@
    "Excess power is %.2fW"
    (:excess-power-watts data-point)))
 
-(defn fetch-solar-data
-  [data-source kill-ch]
-  (let [log-prefix "fetch-solar-data"
-        output-ch (chan)]
+(defn fetch-latest-solar-data
+  [data-source output-ch kill-ch]
+  (let [log-prefix "fetch-solar-data"]
     (go
       (log/info log-prefix "Process starting...")
       (loop [sleep-for 0]
@@ -46,15 +45,11 @@
                   (log/verbose log-prefix "Fetched solar data")
                   (>! output-ch data-point)
                   (recur 10000)))))))
-      (log/info log-prefix "Closing output channel...")
-      (close! output-ch)
-      (log/info log-prefix "Process died"))
-    output-ch))
+      (log/info log-prefix "Process died"))))
 
 (defn filter-new-solar-data
-  [input-ch kill-ch]
-  (let [log-prefix "filter-new-solar-data"
-        output-ch (chan)]
+  [input-ch output-ch kill-ch]
+  (let [log-prefix "filter-new-solar-data"]
     (go
       (log/info log-prefix "Process starting...")
       (loop [last-data-point nil]
@@ -71,50 +66,11 @@
                   (log/info log-prefix (format "Received new solar data: %s" (make-data-point-message data-point)))
                   (>! output-ch data-point)
                   (recur data-point)))))))
-      (log/info log-prefix "Closing output channel...")
-      (close! output-ch)
-      (log/info log-prefix "Process died"))
-    output-ch))
+      (log/info log-prefix "Process died"))))
 
-(defn get-new-site-data
-  [data-source error-ch kill-ch]
-  (let [log-prefix "get-new-site-data"
-        output-ch (chan (sliding-buffer 1))]
-    (go
-      (log/info log-prefix "Process starting...")
-      (loop [sleep-for 0
-             last-data-point nil]
-        (let [result-ch (go
-                          (log/verbose log-prefix (format "Sleeping for %dms" sleep-for))
-                          (Thread/sleep (* 1000 sleep-for))
-                          (get-data-point data-source))
-              [val ch] (alts! [kill-ch result-ch])]
-          (if (= ch kill-ch)
-            (log/info log-prefix "Process dying...")
-            (let [{err :err data-point :data-point} val]
-              (if (some? err)
-                (do
-                  (log/error log-prefix (format "Failed to get site data; %s" (ex-message err)))
-                  (recur 10 last-data-point))
-                (cond
-                  (nil? last-data-point)
-                  (do
-                    (log/info "Received fist solar data")
-                    (>! output-ch data-point)
-                    (recur 30 data-point))
-
-                  (not (is-data-point-newer? data-point last-data-point))
-                  (do
-                    (log/info "No new solar data available")
-                    (>! output-ch data-point)
-                    (recur 30 last-data-point))
-
-                  :else
-                  (do
-                    (log/verbose log-prefix "Received new solar data")
-                    (recur 30 data-point))))))))
-      (log/verbose log-prefix "Closing channel...")
-      (close! output-ch)
-      (log/verbose log-prefix "Process died"))
-    output-ch))
+(defn fetch-new-solar-data
+  [data-source output-ch kill-ch]
+  (let [latest-data-point-ch (chan)]
+    (fetch-latest-solar-data data-source latest-data-point-ch kill-ch)
+    (filter-new-solar-data latest-data-point-ch output-ch kill-ch)))
 
