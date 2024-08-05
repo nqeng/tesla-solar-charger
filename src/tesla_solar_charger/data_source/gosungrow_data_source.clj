@@ -37,6 +37,20 @@
         data-point (data-source/make-data-point time excess-power-watts)]
     data-point))
 
+(defn execute-shell-command
+  [script-filepath ps-id ps-key excess-power-key minute-interval start-timestamp-str end-timestamp-str]
+  (let [args [script-filepath 
+              "data" 
+              "json" 
+              "AppService.queryMutiPointDataList" 
+              (format "StartTimeStamp:%s" start-timestamp-str)
+              (format "EndTimeStamp:%s" end-timestamp-str)
+              (format "MinuteInterval:%s" (str minute-interval)) 
+              (format "Points:%s" excess-power-key) 
+              (format "PsId:%s" ps-id) 
+              (format "PsKeys:%s" ps-key)]] 
+    (apply sh args)))
+
 (defn get-latest-data-point
   [data-source]
   (let [script-filepath (:script-filepath data-source)
@@ -47,7 +61,13 @@
         rounded (round-minutes-down-to-interval time-now 5)
         start-timestamp (format-timestamp1 (.minusSeconds rounded (* 5 60)))
         end-timestamp (format-timestamp1 rounded)
-        result (sh script-filepath ps-key ps-id excess-power-key (str 5) start-timestamp end-timestamp)
+        result (execute-shell-command script-filepath
+                                      ps-id
+                                      ps-key
+                                      excess-power-key
+                                      5
+                                      start-timestamp
+                                      end-timestamp)
         stdout (:out result)
         json (json/parse-string stdout)
         data (get json "data")

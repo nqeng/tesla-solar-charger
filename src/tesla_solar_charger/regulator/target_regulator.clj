@@ -1,6 +1,5 @@
 (ns tesla-solar-charger.regulator.target-regulator
   (:require
-   [tesla-solar-charger.charger.charger :as charger]
    [tesla-solar-charger.haversine :refer [distance-between-geo-points-meters]]
    [tesla-solar-charger.regulator.regulator :refer [IRegulator make-regulation]]))
 
@@ -34,7 +33,7 @@
 
 (defn did-car-start-charging?
   [car-state last-car-state]
-  (or (nil? last-car-state) (not (:is-charging last-car-state))))
+  (and (:is-charging car-state) (not (:is-charging last-car-state))))
 
 (defn did-car-leave-location?
   [location car-state last-car-state]
@@ -128,10 +127,13 @@
       (did-override-turn-off? new-car-state last-car-state)
       (make-regulation 0 "Override turned off")
 
-      (and (not is-override-active)
-           (not (should-override-to-reach-target? last-car-state target-percent target-time))
+      (and (not (should-override-to-reach-target? last-car-state target-percent target-time))
            (should-override-to-reach-target? new-car-state target-percent target-time))
       (make-regulation max-charge-power-watts (format "Overriding to reach %d%% by %s" target-percent target-time))
+
+      (and (should-override-to-reach-target? last-car-state target-percent target-time)
+           (not (should-override-to-reach-target? new-car-state target-percent target-time)))
+      (make-regulation max-charge-power-watts "Turning off automatic override")
 
       :else
       (make-regulation nil "No action"))))
@@ -172,26 +174,27 @@
 (defrecord TargetRegulator []
   IRegulator
   (make-regulation-from-new-car-state [regulator location new-car-state]
-    (let [car-state new-car-state
+    (let [settings (:settings regulator)
           last-car-state (:last-car-state regulator)
-          target-percent (:target-percent regulator)
-          target-time (:target-time regulator)
+          target-percent (get @settings :target-percent 80)
+          target-time (get @settings :target-time (java.time.Instant/now))
           regulation (make-regulation-from-new-car-state
                       location
                       target-percent
                       target-time
                       last-car-state
-                      car-state)
+                      new-car-state)
           regulator (assoc regulator :last-car-state new-car-state)]
       [regulator regulation]))
   (make-regulation-from-new-data-point [regulator location new-data-point]
-    (let [last-car-state (:last-car-state regulator)
+    (let [settings (:settings regulator)
+          last-car-state (:last-car-state regulator)
           last-data-point (:last-data-point regulator)
-          target-percent (:target-percent regulator)
-          target-time (:target-time regulator)
-          power-buffer-watts (:power-buffer-watts regulator)
-          max-climb-watts (:max-climb-watts regulator)
-          max-drop-watts (:max-drop-watts regulator)
+          target-percent (get @settings :target-percent 80)
+          target-time (get @settings :target-time (java.time.Instant/now))
+          power-buffer-watts (get @settings :power-buffer-watts 1000)
+          max-climb-watts (get @settings :max-climb-watts 500)
+          max-drop-watts (get @settings :max-drop-watts 500)
           regulation (make-regulation-from-new-data-point
                       location
                       target-percent
@@ -206,12 +209,8 @@
       [regulator regulation])))
 
 (defn new-TargetRegulator
-  [target-percent target-time power-buffer-watts max-climp-watts max-drop-watts]
-  (let [the-map {:target-percent target-percent
-                 :target-time target-time
-                 :power-buffer-watts power-buffer-watts
-                 :max-climp-watts max-climp-watts
-                 :max-drop-watts max-drop-watts}
+  [settings]
+  (let [the-map {:settings settings}
         defaults {}]
     (map->TargetRegulator (merge defaults the-map))))
 

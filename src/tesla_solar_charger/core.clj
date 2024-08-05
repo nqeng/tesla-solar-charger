@@ -31,6 +31,8 @@
       value
       (throw (ex-info (format "enviromnent variable %s is not defined" key) {})))))
 
+(def settings (atom {}))
+
 (defn -main
   [& args]
   (better-cond
@@ -54,20 +56,15 @@
          script-filepath (get-env-or-throw "GOSUNGROW_SCRIPT_FILEPATH")
          ps-key (get-env-or-throw "GOSUNGROW_PS_KEY")
          ps-id (get-env-or-throw "GOSUNGROW_PS_ID")
-         ps-point (get-env-or-throw "GOSUNGROW_PS_POINT")
+         excess-power-key (get-env-or-throw "GOSUNGROW_EXCESS_POWER_KEY")
          location-latitude (parse-double (get-env-or-throw "LOCATION_LATITUDE"))
          location-longitude (parse-double (get-env-or-throw "LOCATION_LONGITUDE"))
          locationiq-auth-token (get-env-or-throw "LOCATIONIQ_AUTH_TOKEN")
-         kill-ch (async/chan)
+         kill-ch (chan)
          car-data-source (new-TessieDataSource tesla-vin tessie-auth-token locationiq-auth-token)
-         solar-data-source (new-GoSungrowDataSource script-filepath ps-key ps-id ps-point)
-         target-percent 80
-         target-time (utils/time-now)
-         power-buffer-watts 1000
-         max-climb-watts 500
-         max-drop-watts 500
+         solar-data-source (new-GoSungrowDataSource script-filepath ps-key ps-id excess-power-key)
          charge-setter (new-TessieChargeSetter tessie-auth-token tesla-vin)
-         regulator (new-TargetRegulator target-percent target-time power-buffer-watts max-climb-watts max-drop-watts)
+         regulator (new-TargetRegulator settings)
          location {:latitude location-latitude :longitude location-longitude}
          car-state-ch (chan)
          solar-data-ch (chan)
