@@ -1,7 +1,7 @@
 (ns tesla-solar-charger.data-source.gosungrow-data-source
   (:require
    [cheshire.core :as json]
-   [tesla-solar-charger.data-source.data-source :as data-source]
+   [tesla-solar-charger.data-source.data-source :refer [make-data-point IDataSource]]
    [clojure.java.shell :refer [sh]]
    [tesla-solar-charger.utils :as utils]))
 
@@ -34,7 +34,7 @@
   (let [time-string (get object "timestamp")
         time (.toInstant (.atZone (parse-timestamp1 time-string) (java.time.ZoneId/systemDefault)))
         excess-power-watts (float (- (get-in object ["points" excess-power-key])))
-        data-point (data-source/make-data-point time excess-power-watts)]
+        data-point (make-data-point time excess-power-watts)]
     data-point))
 
 (defn execute-shell-command
@@ -83,7 +83,7 @@
 
 (defrecord GoSungrowDataSource []
 
-  data-source/IDataSource
+  IDataSource
   (get-latest-data-point [data-source] (get-latest-data-point data-source)))
 
 (defn new-GoSungrowDataSource
