@@ -80,7 +80,7 @@
                  start-timestamp-string
                  end-timestamp-string)]
     (when (not= 0 (:exit result))
-      (throw (ex-info (format "Failed to execute GoSungrow data command; %s %s" (:err result) (:out result) {}))))
+      (throw (ex-info (format "Failed to execute GoSungrow data command; %s %s" (:err result) (:out result)) {})))
     (let [stdout (:out result)
           json (json/parse-string stdout)
           data (get json "data")
@@ -124,7 +124,7 @@
                  (format "--user=%s" sungrow-username) 
                  (format "--password=%s" sungrow-password))]
     (when (not= 0 (:exit result))
-      (throw (ex-info (format "%s %s" (:err result) (:out result) {}))))))
+      (throw (ex-info (format "%s %s" (:err result) (:out result)) {})))))
 
 (defn new-GoSungrowDataSource
   [script-filepath gosungrow-appkey sungrow-username sungrow-password ps-key ps-id excess-power-key]
