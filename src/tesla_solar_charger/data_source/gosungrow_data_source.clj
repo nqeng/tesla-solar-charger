@@ -1,6 +1,7 @@
 (ns tesla-solar-charger.data-source.gosungrow-data-source
   (:require
    [cheshire.core :as json]
+   [tesla-solar-charger.log :as log]
    [tesla-solar-charger.data-source.data-source :refer [make-data-point IDataSource]]
    [clojure.java.shell :refer [sh]]
    [tesla-solar-charger.utils :as utils]))
@@ -113,6 +114,18 @@
                               ps-point)]
       latest-data-point)))
 
+(defn configure-gosungrow-executable
+  [script-filepath gosungrow-appkey sungrow-username sungrow-password]
+  (let [result (sh 
+                 script-filepath
+                 "config" 
+                 "write" 
+                 (format "--appkey=%s" gosungrow-appkey) 
+                 (format "--user=%s" sungrow-username) 
+                 (format "--password=%s" sungrow-password))]
+    (when (not= 0 (:exit result))
+      (throw (ex-info (format "%s %s" (:err result) (:out result) {}))))))
+
 (defn new-GoSungrowDataSource
   [script-filepath gosungrow-appkey sungrow-username sungrow-password ps-key ps-id excess-power-key]
   (let [the-map {:script-filepath script-filepath
@@ -122,15 +135,16 @@
                  :ps-key ps-key
                  :ps-id ps-id
                  :excess-power-key excess-power-key}
-        defaults {}
-        result (sh 
-                 script-filepath
-                 "config" 
-                 "write" 
-                 (format "--appkey=%s" gosungrow-appkey) 
-                 (format "--user=%s" sungrow-username) 
-                 (format "--password=%s" sungrow-password))]
-    (when (not= 0 (:exit result))
-      (throw (ex-info (format "Failed to config GoSungrow executable; %s %s" (:err result) (:out result) {}))))
+        defaults {}]
+    (try
+      (configure-gosungrow-executable
+        script-filepath 
+        gosungrow-appkey 
+        sungrow-username
+        sungrow-password)
+      (catch clojure.lang.ExceptionInfo e
+        (log/error "GoSungrowDataSource" (format "Failed to config GoSungrow executable; %s" (ex-message e))))
+      (catch Exception e
+        (log/error "GoSungrowDataSource" (format "Failed to config GoSungrow executable; %s" (ex-message e)))))
     (map->GoSungrowDataSource (merge defaults the-map))))
 
