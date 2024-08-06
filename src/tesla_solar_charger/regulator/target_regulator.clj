@@ -96,11 +96,11 @@
            (did-car-leave-location? location new-car-state last-car-state))
       (make-regulation nil "Car stopped charging and left")
 
-      (did-car-stop-charging? new-car-state last-car-state)
-      (make-regulation nil "Car stopped charging")
-
       (did-car-leave-location? location new-car-state last-car-state)
       (make-regulation nil "Car left")
+
+      (not (is-car-at-location? location new-car-state))
+      (make-regulation nil "Car is not at this location")
 
       (and (did-car-enter-location? location new-car-state last-car-state)
            (did-car-start-charging? new-car-state last-car-state)
@@ -114,11 +114,17 @@
       (did-car-enter-location? location new-car-state last-car-state)
       (make-regulation nil "Car entered")
 
+      (and (did-car-stop-charging? new-car-state last-car-state))
+      (make-regulation nil "Car stopped charging")
+
+      (not (:is-charging new-car-state))
+      (make-regulation nil "Car is not charging")
+
       (and (did-car-start-charging? new-car-state last-car-state)
            is-override-active)
       (make-regulation max-charge-power-watts "Car started charging with override")
 
-      (did-car-start-charging? new-car-state last-car-state)
+      (and (did-car-start-charging? new-car-state last-car-state))
       (make-regulation 0 "Car started charging")
 
       (did-override-turn-on? new-car-state last-car-state)
