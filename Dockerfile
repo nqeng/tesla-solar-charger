@@ -1,4 +1,4 @@
-FROM clojure
+FROM openjdk:8-alpine
 
 RUN mkdir -p /tesla-solar-charger
 
