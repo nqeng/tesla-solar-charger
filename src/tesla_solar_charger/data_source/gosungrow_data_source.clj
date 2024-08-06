@@ -41,16 +41,16 @@
 (defn execute-shell-command
   [script-filepath ps-id ps-key excess-power-key minute-interval start-timestamp-string end-timestamp-string]
   (let [result (sh
-          "./GoSungrow"
-          "data"
-          "json"
-          "AppService.queryMutiPointDataList" 
-          (format "StartTimeStamp:%s" start-timestamp-string)
-          (format "EndTimeStamp:%s" end-timestamp-string)
-          (format "MinuteInterval:%s" (str minute-interval)) 
-          (format "Points:%s" excess-power-key) 
-          (format "PsId:%s" ps-id) 
-          (format "PsKeys:%s" ps-key)) ] 
+                 script-filepath
+                 "data"
+                 "json"
+                 "AppService.queryMutiPointDataList" 
+                 (format "StartTimeStamp:%s" start-timestamp-string)
+                 (format "EndTimeStamp:%s" end-timestamp-string)
+                 (format "MinuteInterval:%s" (str minute-interval)) 
+                 (format "Points:%s" excess-power-key) 
+                 (format "PsId:%s" ps-id) 
+                 (format "PsKeys:%s" ps-key))] 
     result))
 
 (defn get-latest-data-point
@@ -124,7 +124,7 @@
                  :excess-power-key excess-power-key}
         defaults {}
         result (sh 
-                 "./GoSungrow" 
+                 script-filepath
                  "config" 
                  "write" 
                  (format "--appkey=%s" gosungrow-appkey) 
