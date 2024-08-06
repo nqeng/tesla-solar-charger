@@ -61,8 +61,6 @@
          gosungrow-appkey (get-env-or-throw "GOSUNGROW_APPKEY")
          sungrow-username (get-env-or-throw "SUNGROW_USERNAME")
          sungrow-password (get-env-or-throw "SUNGROW_PASSWORD")
-         clicksend-username (get-env-or-throw "CLICKSEND_USERNAME")
-         clicksend-api-key (get-env-or-throw "CLICKSEND_API_KEY")
          ps-key (get-env-or-throw "GOSUNGROW_PS_KEY")
          ps-id (get-env-or-throw "GOSUNGROW_PS_ID")
          excess-power-key (get-env-or-throw "GOSUNGROW_EXCESS_POWER_KEY")
