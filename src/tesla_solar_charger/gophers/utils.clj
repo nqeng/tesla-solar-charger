@@ -39,7 +39,8 @@
       (async/close! output-ch))
     output-ch))
 
-(let [input-ch (async/chan)
+(comment
+  (let [input-ch (async/chan)
       output-ch (sliding-buffer input-ch 1)]
 
   (async/>!! input-ch 0)
@@ -57,7 +58,7 @@
 
   (assert (= 1 (async/<!! output-ch)))
 
-  (async/close! input-ch))
+  (async/close! input-ch)))
 
 (defn split-channel
   [input-chan num-channels]
@@ -100,7 +101,8 @@
       (async/close! output-ch))
     output-ch))
 
-(let [input-ch (async/chan)
+(comment
+  (let [input-ch (async/chan)
       output-ch (keep-last-value input-ch)]
 
   (async/>!! input-ch 0)
@@ -121,4 +123,4 @@
   (assert (= 1 (async/<!! output-ch)))
   (assert (= 1 (async/<!! output-ch)))
 
-  (async/close! input-ch))
+  (async/close! input-ch)))

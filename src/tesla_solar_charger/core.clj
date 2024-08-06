@@ -33,6 +33,9 @@
 
 (def settings (atom {}))
 
+
+     (require '[clojure.java.shell :refer [sh]])
+
 (defn -main
   [& args]
   (better-cond
@@ -69,6 +72,7 @@
          car-state-ch (chan)
          solar-data-ch (chan)
          charge-power-ch (chan (sliding-buffer 1))]
+
 
      (fetch-new-car-state car-data-source car-state-ch kill-ch)
 

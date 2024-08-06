@@ -15,6 +15,7 @@
                  [better-cond "2.1.5"]
                  [etaoin "1.0.40"]
                  ]
+  :uberjar-name "tesla-solar-charger.jar"
   :main ^:skip-aot tesla-solar-charger.core
   :target-path "target/%s"
   :profiles {:uberjar {:aot :all

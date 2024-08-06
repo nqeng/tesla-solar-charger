@@ -37,19 +37,67 @@
         data-point (make-data-point time excess-power-watts)]
     data-point))
 
+#_(sh "sh" "-c" "pwd")
+
 (defn execute-shell-command
   [script-filepath ps-id ps-key excess-power-key minute-interval start-timestamp-str end-timestamp-str]
-  (let [args [script-filepath 
-              "data" 
-              "json" 
-              "AppService.queryMutiPointDataList" 
-              (format "StartTimeStamp:%s" start-timestamp-str)
-              (format "EndTimeStamp:%s" end-timestamp-str)
-              (format "MinuteInterval:%s" (str minute-interval)) 
-              (format "Points:%s" excess-power-key) 
-              (format "PsId:%s" ps-id) 
-              (format "PsKeys:%s" ps-key)]] 
-    (apply sh args)))
+  (let [result (sh
+          "./GoSungrow"
+          "data"
+          "json"
+          "AppService.queryMutiPointDataList" 
+          (format "StartTimeStamp:%s" start-timestamp-str)
+          (format "EndTimeStamp:%s" end-timestamp-str)
+          (format "MinuteInterval:%s" (str minute-interval)) 
+          (format "Points:%s" excess-power-key) 
+          (format "PsId:%s" ps-id) 
+          (format "PsKeys:%s" ps-key))
+        _ (println result)
+        ;out (:out (sh "whoami"))
+        ;_ (println out)
+        ;out (:out (sh "pwd"))
+        ;_ (println out)
+        ;out (:out (sh "ls"))
+        ;_ (println out)
+        ] 
+    result
+    ;(println "1" (sh "ls"))
+    ;(println "1" (sh "sh" "-c" "ls"))
+    ;(println "2" (sh "whoami"))
+    ;(println "16" (sh "sh" "-c" "test -e GoSungrow"))
+    ;(println "17" (sh "sh" "-c" "sh ./GoSungrow"))
+    #_(println "18" (sh "./GoSungrow" "data" "json"))
+    #_(println "19" (sh "env"))
+    #_(println "20" (sh "which" "GoSungrow"))
+    #_(println "21" (sh "GoSungrow"))
+    #_(println "22" (sh "sh" "-c" "/usr/local/bin/GoSungrow"))
+    #_(println (-> (java.io.File. ".") .getAbsolutePath))
+    #_(println (vec (file-seq (java.io.File. "."))))
+    #_(println (System/getProperty "user.dir"))
+    #_(println script-filepath)
+    #_(println (sh "echo" "hello" "world"))
+    #_(println (sh "sh" "-c" "file"))
+    #_(println (sh "GoSungrow" :env {"PATH" "/tesla-solar-charger"}))
+    #_(println (sh "sh" "-c" "whoami"))
+    #_(println (sh "sh" "-c" "pwd"))
+    #_(println (sh "sh" "-c" "\"./GoSungrow\"" :dir "/tesla-solar-charger"))
+    #_(println (sh "sh" "-c" "ls -la"))
+    #_(println (sh "sh" "-c" "\"./GoSungrow\""))
+    #_(apply sh args)))
+
+#_(sh "sh" "-c" "\"./GoSungrow\"")
+
+
+#_(comment
+  (execute-shell-command
+  "./GoSungrow"
+  "1152381"
+  "1152381_7_2_3"
+  "p8018"
+  5
+  "20240801080000"
+  "20240801080000"
+  ))
 
 (defn get-latest-data-point
   [data-source]

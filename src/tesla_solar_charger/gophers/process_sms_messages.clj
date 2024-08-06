@@ -2,11 +2,10 @@
   (:require
    [cheshire.core :as json]
    [tesla-solar-charger.utils :as utils]
-   [tesla-solar-charger.interfaces.sms :as sms]
    [clojure.core.async :as async]
    [clj-http.client :as client]))
 
-(defn get-sms-messages
+#_(defn get-sms-messages
   [clicksend-username clicksend-api-key]
   (try
     (-> (client/get
@@ -27,7 +26,7 @@
                 (str "Network error; " error)
                 {:type :network-error}))))))
 
-(defn mark-all-as-read
+#_(defn mark-all-as-read
   [clicksend-username clicksend-api-key]
   (try
     (client/put
@@ -44,7 +43,7 @@
                 (str "Network error; " error)
                 {:type :network-error}))))))
 
-(defn mark-as-read
+#_(defn mark-as-read
   [clicksend-username clicksend-api-key sms-message]
   (try
     (client/put
@@ -61,7 +60,7 @@
                 (str "Network error; " error)
                 {:type :network-error}))))))
 
-(defn process-sms-messages
+#_(defn process-sms-messages
   [log-prefix clicksend-username clicksend-api-key message-processors error-chan log-chan]
   (async/go
     (try
@@ -105,7 +104,7 @@
         (async/>! error-chan e)))))
 
 
-(defrecord SetPowerBuffer [set-settings-chan get-settings-chan car car-state-chan solar-sites]
+#_(defrecord SetPowerBuffer [set-settings-chan get-settings-chan car car-state-chan solar-sites]
 
   sms/SMSProcessor
 
@@ -144,7 +143,7 @@
       (catch NullPointerException e
         false))))
 
-(defrecord SetTargetPercent [set-settings-chan get-settings-chan car car-state-chan solar-sites]
+#_(defrecord SetTargetPercent [set-settings-chan get-settings-chan car car-state-chan solar-sites]
 
   sms/SMSProcessor
 
@@ -184,7 +183,7 @@
       (catch NullPointerException e
         false))))
 
-(defrecord SetTargetTime [set-settings-chan get-settings-chan car car-state-chan solar-sites]
+#_(defrecord SetTargetTime [set-settings-chan get-settings-chan car car-state-chan solar-sites]
 
   sms/SMSProcessor
 
@@ -231,7 +230,7 @@
       (catch NullPointerException e
         false))))
 
-(defrecord SetMaxClimb [set-settings-chan get-settings-chan car car-state-chan solar-sites]
+#_(defrecord SetMaxClimb [set-settings-chan get-settings-chan car car-state-chan solar-sites]
 
   sms/SMSProcessor
 
@@ -271,7 +270,7 @@
       (catch NullPointerException e
         false))))
 
-(defrecord SetMaxDrop [set-settings-chan get-settings-chan car car-state-chan solar-sites]
+#_(defrecord SetMaxDrop [set-settings-chan get-settings-chan car car-state-chan solar-sites]
 
   sms/SMSProcessor
 

@@ -1,9 +1,7 @@
 (ns tesla-solar-charger.gophers.publish-data
   (:require
-   [tesla-solar-charger.interfaces.site :as site]
    [tesla-solar-charger.utils :as utils]
    [clj-http.client :as client]
-   [tesla-solar-charger.interfaces.car :as car]
    [clojure.core.async :as async]))
 
 #_(defn publish-data
@@ -22,7 +20,7 @@
                   (str "Failed to get Tesla state; " error)
                   {:type :network-error})))))))
 
-(defn publish-data
+#_(defn publish-data
   [log-prefix thingspeak-api-key car-state-chan site-data-chan error-chan log-chan]
   (async/go
     (try
