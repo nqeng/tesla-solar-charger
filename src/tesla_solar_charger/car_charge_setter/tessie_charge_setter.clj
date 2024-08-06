@@ -20,10 +20,9 @@
         query-params {:retry-duration "40"
                       :wait-for-completion "true"
                       :amps (str (int charge-current-amps))}
-        headers {:oauth-token tessie-auth-token
-                 :accept :json
-                 :query-params query-params}
-        _ (client/get url headers)]
+        _ (client/get url {:oauth-token tessie-auth-token
+                           :accept :json
+                           :query-params query-params})]
     nil))
 
 (defn set-charge-power-tessie

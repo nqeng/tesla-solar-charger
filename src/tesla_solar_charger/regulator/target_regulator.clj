@@ -171,13 +171,31 @@
             message (format "Excess power is %.2fW" excess-power-watts)]
         (make-regulation new-charge-power-watts message)))))
 
+(def default-settings
+  {:target-percent 80
+   :target-hour 17
+   :target-minute 0
+   :power-buffer-watts 1000
+   :max-climb-watts 500
+   :max-drop-watts 500})
+
 (defrecord TargetRegulator []
   IRegulator
   (make-regulation-from-new-car-state [regulator location new-car-state]
-    (let [settings (:settings regulator)
+    (let [get-settings-fn (:get-settings-fn regulator)
+          settings (merge (get-settings-fn) default-settings)
           last-car-state (:last-car-state regulator)
-          target-percent (get @settings :target-percent 80)
-          target-time (get @settings :target-time (java.time.Instant/now))
+          target-percent (:target-percent settings)
+          target-hour (:target-hour settings)
+          target-minute (:target-minute settings)
+          local-time-now (java.time.ZonedDateTime/now)
+          target-time (-> local-time-now
+                          (.withHour target-hour)
+                          (.withMinute target-minute))
+          target-time (if (.isAfter target-time local-time-now)
+                        target-time
+                        (.plusDays target-time 1))
+          target-time (.toInstant target-time)
           regulation (make-regulation-from-new-car-state
                       location
                       target-percent
@@ -187,14 +205,25 @@
           regulator (assoc regulator :last-car-state new-car-state)]
       [regulator regulation]))
   (make-regulation-from-new-data-point [regulator location new-data-point]
-    (let [settings (:settings regulator)
-          last-car-state (:last-car-state regulator)
+    (let [last-car-state (:last-car-state regulator)
           last-data-point (:last-data-point regulator)
-          target-percent (get @settings :target-percent 80)
-          target-time (get @settings :target-time (java.time.Instant/now))
-          power-buffer-watts (get @settings :power-buffer-watts 1000)
-          max-climb-watts (get @settings :max-climb-watts 500)
-          max-drop-watts (get @settings :max-drop-watts 500)
+          get-settings-fn (:get-settings-fn regulator)
+          settings (merge (get-settings-fn) default-settings)
+          last-car-state (:last-car-state regulator)
+          target-percent (:target-percent settings)
+          target-hour (:target-hour settings)
+          target-minute (:target-minute settings)
+          local-time-now (java.time.ZonedDateTime/now)
+          target-time (-> local-time-now
+                          (.withHour target-hour)
+                          (.withMinute target-minute))
+          target-time (if (.isAfter target-time local-time-now)
+                        target-time
+                        (.plusDays target-time 1))
+          target-time (.toInstant target-time)
+          power-buffer-watts (:power-buffer-watts settings)
+          max-climb-watts (:max-climb-watts settings)
+          max-drop-watts (:max-drop-watts settings)
           regulation (make-regulation-from-new-data-point
                       location
                       target-percent
@@ -209,8 +238,8 @@
       [regulator regulation])))
 
 (defn new-TargetRegulator
-  [settings]
-  (let [the-map {:settings settings}
+  [get-settings-fn]
+  (let [the-map {:get-settings-fn get-settings-fn}
         defaults {}]
     (map->TargetRegulator (merge defaults the-map))))
 

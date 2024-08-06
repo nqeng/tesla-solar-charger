@@ -3,12 +3,14 @@
   (:require
    [clojure.tools.cli :refer [parse-opts]]
    [tesla-solar-charger.car-charge-setter.tessie-charge-setter :refer [new-TessieChargeSetter]]
+   [tesla-solar-charger.gophers.process-sms-messages :refer [fetch-new-sms-messages]]
    [tesla-solar-charger.log :as log]
    [tesla-solar-charger.regulator.target-regulator :refer [new-TargetRegulator]]
    [tesla-solar-charger.gophers.get-car-state :refer [fetch-new-car-state]]
    [tesla-solar-charger.gophers.set-charge-rate :refer [set-charge-rate]]
    [better-cond.core :refer [cond] :rename {cond better-cond}]
    [tesla-solar-charger.utils :as utils]
+   [duratom.core :refer [duratom]]
    [tesla-solar-charger.gophers.regulate-charge-rate :refer [regulate-charge-rate]]
    [tesla-solar-charger.gophers.utils :refer [sliding-buffer keep-last-value print-values] :rename {sliding-buffer my-sliding-buffer}]
    [tesla-solar-charger.car-data-source.tessie-data-source :refer [new-TessieDataSource]]
@@ -31,10 +33,9 @@
       value
       (throw (ex-info (format "enviromnent variable %s is not defined" key) {})))))
 
-(def settings (atom {}))
-
-
-     (require '[clojure.java.shell :refer [sh]])
+(def settings (duratom :local-file
+                       :file-path (.getAbsolutePath (clojure.java.io/file (get-env-or-throw "SETTINGS_FILEPATH")))
+                       :init {}))
 
 (defn -main
   [& args]
@@ -60,6 +61,8 @@
          gosungrow-appkey (get-env-or-throw "GOSUNGROW_APPKEY")
          sungrow-username (get-env-or-throw "SUNGROW_USERNAME")
          sungrow-password (get-env-or-throw "SUNGROW_PASSWORD")
+         clicksend-username (get-env-or-throw "CLICKSEND_USERNAME")
+         clicksend-api-key (get-env-or-throw "CLICKSEND_API_KEY")
          ps-key (get-env-or-throw "GOSUNGROW_PS_KEY")
          ps-id (get-env-or-throw "GOSUNGROW_PS_ID")
          excess-power-key (get-env-or-throw "GOSUNGROW_EXCESS_POWER_KEY")
@@ -70,12 +73,11 @@
          car-data-source (new-TessieDataSource tesla-vin tessie-auth-token locationiq-auth-token)
          solar-data-source (new-GoSungrowDataSource script-filepath gosungrow-appkey sungrow-username sungrow-password ps-key ps-id excess-power-key)
          charge-setter (new-TessieChargeSetter tessie-auth-token tesla-vin)
-         regulator (new-TargetRegulator settings)
+         regulator (new-TargetRegulator (partial deref settings))
          location {:latitude location-latitude :longitude location-longitude}
          car-state-ch (chan)
          solar-data-ch (chan)
          charge-power-ch (chan (sliding-buffer 1))]
-
 
      (fetch-new-car-state car-data-source car-state-ch kill-ch)
 

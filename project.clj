@@ -6,6 +6,7 @@
   :dependencies [
                  [org.clojure/tools.cli "1.0.219"]
                  [clj-time "0.15.2"]
+                 [duratom "0.5.9"]
                  [org.clojure/clojure "1.11.1"]
                  [clj-http "3.12.3"]
                  [cheshire "5.11.0"]

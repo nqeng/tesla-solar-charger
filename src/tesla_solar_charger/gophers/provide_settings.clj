@@ -1,6 +1,6 @@
 (ns tesla-solar-charger.gophers.provide-settings
   (:require
-   [clojure.core.async :as async]
+   [clojure.core.async :refer [go >! <! ]]
    [cheshire.core :as json]))
 
 (def default-settings

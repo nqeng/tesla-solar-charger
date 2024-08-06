@@ -1,108 +1,103 @@
 (ns tesla-solar-charger.gophers.process-sms-messages
   (:require
    [cheshire.core :as json]
+   [tesla-solar-charger.log :as log]
    [tesla-solar-charger.utils :as utils]
-   [clojure.core.async :as async]
+   [clojure.core.async :refer [go >! alts!]]
    [clj-http.client :as client]))
 
-#_(defn get-sms-messages
+(defn get-sms-messages
   [clicksend-username clicksend-api-key]
-  (try
-    (-> (client/get
+  (-> (client/get
          "https://rest.clicksend.com/v3/sms/inbound"
          {:basic-auth [clicksend-username clicksend-api-key]})
         :body
         json/parse-string
         (get "data")
-        (get "data"))
-    (catch java.net.UnknownHostException e
-      (let [error (.getMessage e)]
-        (throw (ex-info
-                (str "Network error; " error)
-                {:type :network-error}))))
-    (catch java.net.NoRouteToHostException e
-      (let [error (.getMessage e)]
-        (throw (ex-info
-                (str "Network error; " error)
-                {:type :network-error}))))))
+        (get "data")))
 
-#_(defn mark-all-as-read
+(defn get-sent-messages
   [clicksend-username clicksend-api-key]
-  (try
-    (client/put
+  (let [url "https://rest.clicksend.com/v3/sms/history"
+        response (client/get url {:basic-auth [clicksend-username clicksend-api-key]})
+        messages (-> response
+                     :body
+                     json/parse-string
+                     (get "data")
+                     (get "data"))]
+    messages))
+
+(defn get-last-sent-message-date
+  [clicksend-username clicksend-api-key]
+  (-> (get-sent-messages clicksend-username clicksend-api-key)
+      last
+      (get "date")
+      java.time.Instant/ofEpochSecond))
+
+(defn mark-all-as-read
+  [clicksend-username clicksend-api-key]
+  (client/put
      "https://rest.clicksend.com/v3/sms/inbound-read"
-     {:basic-auth [clicksend-username clicksend-api-key]})
-    (catch java.net.UnknownHostException e
-      (let [error (.getMessage e)]
-        (throw (ex-info
-                (str "Network error; " error)
-                {:type :network-error}))))
-    (catch java.net.NoRouteToHostException e
-      (let [error (.getMessage e)]
-        (throw (ex-info
-                (str "Network error; " error)
-                {:type :network-error}))))))
+     {:basic-auth [clicksend-username clicksend-api-key]}))
 
-#_(defn mark-as-read
+(defn mark-as-read
   [clicksend-username clicksend-api-key sms-message]
-  (try
-    (client/put
+  (client/put
      (str "https://rest.clicksend.com/v3/sms/inbound-read/" (get sms-message "message_id"))
-     {:basic-auth [clicksend-username clicksend-api-key]})
-    (catch java.net.UnknownHostException e
-      (let [error (.getMessage e)]
-        (throw (ex-info
-                (str "Network error; " error)
-                {:type :network-error}))))
-    (catch java.net.NoRouteToHostException e
-      (let [error (.getMessage e)]
-        (throw (ex-info
-                (str "Network error; " error)
-                {:type :network-error}))))))
+     {:basic-auth [clicksend-username clicksend-api-key]}))
 
-#_(defn process-sms-messages
-  [log-prefix clicksend-username clicksend-api-key message-processors error-chan log-chan]
-  (async/go
-    (try
-      (mark-all-as-read clicksend-username clicksend-api-key)
-      (loop []
-        (async/>! log-chan {:level :info :prefix log-prefix :message "Getting text messages..."})
-        (let [sms-messages (get-sms-messages clicksend-username clicksend-api-key)]
-          (async/>! log-chan {:level :info :prefix log-prefix :message (format "Got %s text messages" (count sms-messages))})
-          (when (not (nil? (seq sms-messages)))
-            (async/>! log-chan {:level :verbose :prefix log-prefix :message sms-messages}))
-          (doseq [sms sms-messages]
-            (mark-as-read clicksend-username clicksend-api-key sms)
-            (doseq [processor message-processors
-                    :let [result (sms/process-sms processor sms)
-                          _ (async/>! log-chan {:level :verbose
-                                                :prefix log-prefix
-                                                :message (format "Processor %s returned %s" (get (re-find #"(\w+\.)+(.*)@.*$" (str processor)) 2) result)})]
-                    :while (false? result)]))
-          (when-let [next-state-available-time (utils/time-after-seconds 5)]
-            (when (.isAfter next-state-available-time (java.time.LocalDateTime/now))
-              (async/>! log-chan {:level :info
-                                  :prefix log-prefix
-                                  :message (format "Sleeping until %s"
-                                                   (utils/format-local-time next-state-available-time))})
-              (Thread/sleep (utils/millis-between-times (java.time.LocalDateTime/now) next-state-available-time))))
-          (recur)))
-      (catch clojure.lang.ExceptionInfo e
-        (case (:type (ex-data e))
+(defn perform-and-return-error
+  [foo]
+  (try
+    (let [result (foo)]
+      {:err nil :val result})
+    (catch clojure.lang.ExceptionInfo err
+      {:err err :val nil})
+    (catch Exception err
+      {:err err :val nil})))
 
-          :network-error
-          (do
-            (async/>! log-chan {:level :error
-                                :prefix log-prefix
-                                :message (ex-message e)})
-            (Thread/sleep 10000))
-
-          (throw e))
-
-        (async/>! error-chan e))
-      (catch Exception e
-        (async/>! error-chan e)))))
-
+(defn fetch-new-sms-messages
+  [clicksend-username clicksend-api-key output-ch kill-ch]
+  (let [log-prefix "process-sms-messages"]
+    (go
+      (log/info log-prefix "Process starting...")
+      (try
+        (mark-all-as-read clicksend-username clicksend-api-key)
+        (log/info log-prefix "Marked old messages as read")
+        (loop [sleep-for 0]
+          (let [func (partial get-sms-messages clicksend-username clicksend-api-key)
+                result-ch (go
+                            (Thread/sleep sleep-for)
+                            (perform-and-return-error func))
+                [val ch] (alts! [kill-ch result-ch])]
+            (if (= ch kill-ch)
+              (log/info log-prefix "Process dying...")
+              (let [{err :err messages :val} val]
+                (if (some? err)
+                  (do
+                    (log/error log-prefix (format "Failed to fetch messages; %s" (ex-message err)))
+                    (recur 10000))
+                  (if (empty? messages)
+                    (do
+                      (log/info log-prefix "No new messages")
+                      (recur 10000))
+                    (do
+                      (log/info log-prefix (format "Fetched %s messages" (count messages)))
+                      (try
+                        (mark-all-as-read clicksend-username clicksend-api-key)
+                        (log/info log-prefix "Marked messages as read")
+                        (catch clojure.lang.ExceptionInfo e
+                          (log/error log-prefix (format "Failed to mark messages as read; %s" (ex-message e))))
+                        (catch Exception e
+                          (log/error log-prefix (format "Failed to mark messages as read; %s" (ex-message e)))))
+                      (doseq [message messages]
+                        (>! output-ch message))
+                      (recur 10000))))))))
+        (catch clojure.lang.ExceptionInfo e
+          (log/error (format log-prefix "Failed to mark old messages as read; %s" (ex-message e))))
+        (catch Exception e
+          (log/error (format log-prefix "Failed to mark old messages as read; %s" (ex-message e)))))
+      (log/info log-prefix "Process died"))))
 
 #_(defrecord SetPowerBuffer [set-settings-chan get-settings-chan car car-state-chan solar-sites]
 
