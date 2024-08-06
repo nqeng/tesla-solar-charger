@@ -18,7 +18,7 @@
                 (log/error log-prefix "Input channel was closed")
                 (do
                   (try
-                    (log/info log-prefix (format "Setting charge rate to %.2fW..." power-watts))
+                    (log/info log-prefix (format "Setting charge rate to %.2fW..." (float power-watts)))
                     (set-charge-power charge-setter power-watts)
                     (log/info log-prefix "Successfully set charge rate")
                     (catch clojure.lang.ExceptionInfo e

@@ -57,6 +57,9 @@
    (let [tesla-vin (get-env-or-throw "TESLA_VIN")
          tessie-auth-token (get-env-or-throw "TESSIE_AUTH_TOKEN")
          script-filepath (get-env-or-throw "GOSUNGROW_SCRIPT_FILEPATH")
+         gosungrow-appkey (get-env-or-throw "GOSUNGROW_APPKEY")
+         sungrow-username (get-env-or-throw "SUNGROW_USERNAME")
+         sungrow-password (get-env-or-throw "SUNGROW_PASSWORD")
          ps-key (get-env-or-throw "GOSUNGROW_PS_KEY")
          ps-id (get-env-or-throw "GOSUNGROW_PS_ID")
          excess-power-key (get-env-or-throw "GOSUNGROW_EXCESS_POWER_KEY")
@@ -65,7 +68,7 @@
          locationiq-auth-token (get-env-or-throw "LOCATIONIQ_AUTH_TOKEN")
          kill-ch (chan)
          car-data-source (new-TessieDataSource tesla-vin tessie-auth-token locationiq-auth-token)
-         solar-data-source (new-GoSungrowDataSource script-filepath ps-key ps-id excess-power-key)
+         solar-data-source (new-GoSungrowDataSource script-filepath gosungrow-appkey sungrow-username sungrow-password ps-key ps-id excess-power-key)
          charge-setter (new-TessieChargeSetter tessie-auth-token tesla-vin)
          regulator (new-TargetRegulator settings)
          location {:latitude location-latitude :longitude location-longitude}

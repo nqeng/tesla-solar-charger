@@ -21,8 +21,8 @@
 (defn make-data-point-message
   [data-point]
   (format
-   "Excess power is %.2fW"
-   (:excess-power-watts data-point)))
+   "Excess power is %.2fW as of %s"
+   (:excess-power-watts data-point) (:timestamp data-point)))
 
 (defn fetch-latest-solar-data
   [data-source output-ch kill-ch]

@@ -23,7 +23,7 @@
   (format
    "Car is at %s (%s)"
    (:readable-location-name car-state)
-   (if (:is-charging car-state) (format "charging at %dA" (:charge-current-amps car-state)) "not charging")))
+   (if (:is-charging car-state) (format "charging at %.2fW" (float (:charge-power-watts car-state))) "not charging")))
 
 (defn poll-latest-car-state
   [car output-ch kill-ch]

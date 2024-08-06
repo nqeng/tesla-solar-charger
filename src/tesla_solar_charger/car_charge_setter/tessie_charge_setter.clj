@@ -19,7 +19,7 @@
   (let [url (str "https://api.tessie.com/" vehicle-vin "/command/set_charging_amps")
         query-params {:retry-duration "40"
                       :wait-for-completion "true"
-                      :amps (str charge-current-amps)}
+                      :amps (str (int charge-current-amps))}
         headers {:oauth-token tessie-auth-token
                  :accept :json
                  :query-params query-params}

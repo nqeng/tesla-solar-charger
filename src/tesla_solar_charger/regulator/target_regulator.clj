@@ -70,12 +70,12 @@
   (< (get-minutes-until-charge-percent car-state target-percent)
      (minutes-between-times (:timestamp car-state) target-time)))
 
-(defn get-minutes-until-charge-percent-at-max-rate [state target-percent]
-  (let [charge-rate-amps (:charge-current-amps state)
-        max-charge-rate-amps (:max-charge-current-amps state)
-        minutes-to-target-percent (get-minutes-until-charge-percent state target-percent)
-        minutes-per-amp (/ minutes-to-target-percent max-charge-rate-amps)
-        minutes-to-target-percent-at-max-rate (* minutes-per-amp charge-rate-amps)]
+(defn get-minutes-until-charge-percent-at-max-rate [car-state target-percent]
+  (let [charge-power-watts (:charge-power-watts car-state)
+        max-charge-power-watts (:max-charge-power-watts car-state)
+        minutes-to-target-percent (get-minutes-until-charge-percent car-state target-percent)
+        minutes-per-watt (/ minutes-to-target-percent charge-power-watts)
+        minutes-to-target-percent-at-max-rate (* minutes-per-watt max-charge-power-watts)]
     minutes-to-target-percent-at-max-rate))
 
 (defn should-override-to-reach-target?
@@ -146,7 +146,7 @@
       (make-regulation nil "No car state")
 
       (not (is-car-at-location? location last-car-state))
-      (make-regulation nil "Cat is not at this location")
+      (make-regulation nil "Car is not at this location")
 
       (not (:is-charging last-car-state))
       (make-regulation nil "Car is not charging")
