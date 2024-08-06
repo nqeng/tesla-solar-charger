@@ -12,7 +12,7 @@
    [tesla-solar-charger.utils :as utils]
    [duratom.core :refer [duratom]]
    [tesla-solar-charger.gophers.regulate-charge-rate :refer [regulate-charge-rate]]
-   [tesla-solar-charger.gophers.utils :refer [sliding-buffer split-channel keep-last-value print-values] :rename {sliding-buffer my-sliding-buffer}]
+   [tesla-solar-charger.gophers.utils :refer [sliding-buffer split-ch split-channel keep-last-value print-values] :rename {sliding-buffer my-sliding-buffer}]
    [tesla-solar-charger.car-data-source.tessie-data-source :refer [new-TessieDataSource]]
    [tesla-solar-charger.data-source.gosungrow-data-source :refer [new-GoSungrowDataSource]]
    [tesla-solar-charger.gophers.get-site-data :refer [fetch-new-solar-data]]
@@ -85,10 +85,13 @@
          regulator (new-TargetRegulator car-name location (partial deref settings))
          regulator2 (new-TargetRegulator car-name location2 (partial deref settings))
          car-state-ch (chan)
-         [car-state-ch2 car-state-ch3] (split-channel car-state-ch 2)
+         car-state-ch2 (chan)
+         car-state-ch3 (chan)
          solar-data-ch (chan)
          solar-data-ch2 (chan)
          charge-power-ch (chan (sliding-buffer 1))]
+
+     (split-ch car-state-ch car-state-ch2 car-state-ch3)
 
      (fetch-new-car-state car-data-source car-state-ch kill-ch)
 

@@ -60,6 +60,14 @@
 
   (async/close! input-ch)))
 
+(defn split-ch
+  [input-ch & output-chs]
+  (async/go-loop []
+                 (let [val (async/<! input-ch)]
+                   (when (some? val)
+                     (doseq [ch output-chs] (async/>! ch val))
+                     (recur)))))
+
 (defn split-channel
   [input-chan num-channels]
   (let [output-chs (repeat num-channels (async/chan))]

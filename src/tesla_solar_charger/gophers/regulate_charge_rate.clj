@@ -5,7 +5,7 @@
    [clojure.core.async :as async :refer [close! sliding-buffer chan alts! >! go]]))
 
 (defn regulate-charge-rate
-  [regulator location car-state-ch data-point-ch charge-power-ch kill-ch]
+  [regulator car-state-ch data-point-ch charge-power-ch kill-ch]
   (let [log-prefix "regulate-charge-rate"]
     (go
       (log/info log-prefix "Process starting...")
@@ -19,7 +19,7 @@
                 (do
                   (log/info log-prefix "Received new car state")
                   (let [car-state val
-                        [regulator regulation] (make-regulation-from-new-car-state regulator location car-state)
+                        [regulator regulation] (make-regulation-from-new-car-state regulator car-state)
                         message (:message regulation)
                         new-charge-power-watts (:new-charge-power-watts regulation)]
                     (when (some? new-charge-power-watts)
@@ -30,7 +30,7 @@
                 (do
                   (log/info log-prefix "Received new data point")
                   (let [data-point val
-                        [regulator regulation] (make-regulation-from-new-data-point regulator location data-point)
+                        [regulator regulation] (make-regulation-from-new-data-point regulator data-point)
                         message (:message regulation)
                         new-charge-power-watts (:new-charge-power-watts regulation)]
                     (when (some? new-charge-power-watts)
