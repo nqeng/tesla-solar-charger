@@ -168,12 +168,13 @@
       (make-regulation nil "No change to excess power")
 
       :else
-      (let [new-charge-power-watts (calc-new-charge-power-watts
-                                    (:charge-power-watts last-car-state)
-                                    excess-power-watts
-                                    power-buffer-watts
-                                    max-climp-watts
-                                    max-drop-watts)
+      (let [new-charge-power-watts 
+            (calc-new-charge-power-watts
+              (:charge-power-watts last-car-state)
+              excess-power-watts
+              power-buffer-watts
+              max-climp-watts
+              max-drop-watts)
             message (format "Excess power is %.2fW" excess-power-watts)]
         (make-regulation new-charge-power-watts message)))))
 

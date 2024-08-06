@@ -12,7 +12,7 @@
    [tesla-solar-charger.utils :as utils]
    [duratom.core :refer [duratom]]
    [tesla-solar-charger.gophers.regulate-charge-rate :refer [regulate-charge-rate]]
-   [tesla-solar-charger.gophers.utils :refer [sliding-buffer keep-last-value print-values] :rename {sliding-buffer my-sliding-buffer}]
+   [tesla-solar-charger.gophers.utils :refer [sliding-buffer split-channel keep-last-value print-values] :rename {sliding-buffer my-sliding-buffer}]
    [tesla-solar-charger.car-data-source.tessie-data-source :refer [new-TessieDataSource]]
    [tesla-solar-charger.data-source.gosungrow-data-source :refer [new-GoSungrowDataSource]]
    [tesla-solar-charger.gophers.get-site-data :refer [fetch-new-solar-data]]
@@ -66,22 +66,36 @@
          excess-power-key (get-env-or-throw "GOSUNGROW_EXCESS_POWER_KEY")
          location-latitude (parse-double (get-env-or-throw "LOCATION_LATITUDE"))
          location-longitude (parse-double (get-env-or-throw "LOCATION_LONGITUDE"))
+         ps-key2 (get-env-or-throw "GOSUNGROW_PS_KEY2")
+         ps-id2 (get-env-or-throw "GOSUNGROW_PS_ID2")
+         excess-power-key2 (get-env-or-throw "GOSUNGROW_EXCESS_POWER_KEY2")
+         location-latitude2 (parse-double (get-env-or-throw "LOCATION_LATITUDE2"))
+         location-longitude2 (parse-double (get-env-or-throw "LOCATION_LONGITUDE2"))
          locationiq-auth-token (get-env-or-throw "LOCATIONIQ_AUTH_TOKEN")
          kill-ch (chan)
          car-data-source (new-TessieDataSource tesla-vin tessie-auth-token locationiq-auth-token)
          solar-data-source (new-GoSungrowDataSource script-filepath gosungrow-appkey sungrow-username sungrow-password ps-key ps-id excess-power-key)
+         solar-data-source2 (new-GoSungrowDataSource script-filepath gosungrow-appkey sungrow-username sungrow-password ps-key2 ps-id2 excess-power-key2)
          charge-setter (new-TessieChargeSetter tessie-auth-token tesla-vin)
          regulator (new-TargetRegulator (partial deref settings))
+         regulator2 (new-TargetRegulator (partial deref settings))
          location {:latitude location-latitude :longitude location-longitude}
+         location2 {:latitude location-latitude2 :longitude location-longitude2}
          car-state-ch (chan)
+         [car-state-ch2 car-state-ch3] (split-channel car-state-ch 2)
          solar-data-ch (chan)
+         solar-data-ch2 (chan)
          charge-power-ch (chan (sliding-buffer 1))]
 
      (fetch-new-car-state car-data-source car-state-ch kill-ch)
 
      (fetch-new-solar-data solar-data-source solar-data-ch kill-ch)
 
-     (regulate-charge-rate regulator location car-state-ch solar-data-ch charge-power-ch kill-ch)
+     (fetch-new-solar-data solar-data-source2 solar-data-ch2 kill-ch)
+
+     (regulate-charge-rate regulator location car-state-ch2 solar-data-ch charge-power-ch kill-ch)
+
+     (regulate-charge-rate regulator2 location2 car-state-ch3 solar-data-ch2 charge-power-ch kill-ch)
 
      (set-charge-rate charge-setter charge-power-ch kill-ch)
 
