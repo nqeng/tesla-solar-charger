@@ -39,7 +39,6 @@
              prefix (if (some? prefix) prefix "Misc")
              log-message (format "[%s] [%s] %s" log-timestamp prefix message)
              log-file-path (make-log-file-path time)]
-
          (println log-message)
          (make-parents log-file-path)
          (spit log-file-path (str log-message "\n") :append true)))))
