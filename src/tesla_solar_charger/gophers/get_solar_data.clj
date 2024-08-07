@@ -6,8 +6,9 @@
     [clojure.core.async :refer [>! alts! timeout chan go close!]]))
 
 (defn is-data-point-newer?
-  [data-point1 data-point2]
-  (.isAfter (:timestamp data-point1) (:timestamp data-point2)))
+  [data-point ?last-data-point]
+  (or (nil? ?last-data-point)
+      (.isAfter (:timestamp data-point) (:timestamp ?last-data-point))))
 
 (defn make-data-point-message
   [data-point]
@@ -41,14 +42,14 @@
           (errorf "[%s] Failed to fetch solar data; %s" prefix err)
           (recur data-source 30 ?last-data-point))
 
-        (and (some? ?last-data-point)
-             (not (is-data-point-newer? data-point ?last-data-point)))
+        (not (is-data-point-newer? data-point ?last-data-point))
         (do
           (infof "[%s] No new solar data" prefix)
           (recur data-source 30 ?last-data-point))
 
         :do (infof "[%s] %s" prefix (make-data-point-message data-point)) 
         :do (debugf "[%s] Putting value on channel..." prefix)
+
         :let [success (>! output-ch data-point)]
 
         (false? success) (errorf "[%s] Output channel was closed" prefix)

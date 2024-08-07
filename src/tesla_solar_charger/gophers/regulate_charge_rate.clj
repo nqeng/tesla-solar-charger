@@ -1,16 +1,16 @@
 (ns tesla-solar-charger.gophers.regulate-charge-rate
   (:require
-   [taoensso.timbre :as timbre]
+   [taoensso.timbre :as timbre :refer [infof debugf errorf]]
    [tesla-solar-charger.regulator.regulator :refer [make-regulation-from-new-car-state make-regulation-from-new-data-point]]
    [clojure.core.async :as async :refer [close! chan alts! >! go]]))
 
 (defn regulate-charge-rate
-  [regulator car-state-ch data-point-ch charge-power-ch kill-ch log-prefix]
-  (letfn [(info [msg] (timbre/info (format "[%s]" log-prefix) msg))
-          (error [msg] (timbre/error (format "[%s]" log-prefix) msg))
-          (debug [msg] (timbre/debug (format "[%s]" log-prefix) msg))]
+  [regulator car-state-ch data-point-ch charge-power-ch kill-ch prefix]
+  (letfn [(info [msg] (timbre/info (format "[%s]" prefix) msg))
+          (error [msg] (timbre/error (format "[%s]" prefix) msg))
+          (debug [msg] (timbre/debug (format "[%s]" prefix) msg))]
     (go
-      (info "Process starting...")
+      (infof "[%s] Process starting..." prefix)
       (loop [regulator regulator]
         (let [[val ch] (alts! [kill-ch car-state-ch data-point-ch])]
           (if (= ch kill-ch)
