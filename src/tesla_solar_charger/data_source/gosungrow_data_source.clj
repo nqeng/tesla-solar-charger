@@ -60,7 +60,7 @@
                        (:out result)) 
                {})))))
 
-(defn execute-shell-command
+(defn execute-data-shell-command
   [gosungrow-filepath ps-id ps-key ps-point data-interval-minutes start-timestamp-string end-timestamp-string]
   (sh
     gosungrow-filepath
@@ -76,7 +76,7 @@
 
 (defn get-gosungrow-json-data
   [gosungrow-filepath ps-id ps-key ps-point data-interval-minutes start-timestamp-string end-timestamp-string]
-  (let [result (execute-shell-command 
+  (let [result (execute-data-shell-command 
                  gosungrow-filepath
                  ps-id
                  ps-key
