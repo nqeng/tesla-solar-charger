@@ -93,15 +93,15 @@
 
      (split-ch car-state-ch car-state-ch2 car-state-ch3)
 
-     (fetch-new-car-state car-data-source car-state-ch kill-ch)
+     (fetch-new-car-state car-data-source car-state-ch kill-ch "Tessie Data Source")
 
-     (fetch-new-solar-data solar-data-source solar-data-ch kill-ch location-name)
+     (fetch-new-solar-data solar-data-source solar-data-ch kill-ch (format "%s Data Source" location-name))
 
-     (fetch-new-solar-data solar-data-source2 solar-data-ch2 kill-ch location-name2)
+     (fetch-new-solar-data solar-data-source2 solar-data-ch2 kill-ch (format "%s Data Source" location-name2))
 
-     (regulate-charge-rate regulator car-state-ch2 solar-data-ch charge-power-ch kill-ch)
+     (regulate-charge-rate regulator car-state-ch2 solar-data-ch charge-power-ch kill-ch (format "%s Regulator" location-name))
 
-     (regulate-charge-rate regulator2 car-state-ch3 solar-data-ch2 charge-power-ch kill-ch)
+     (regulate-charge-rate regulator2 car-state-ch3 solar-data-ch2 charge-power-ch kill-ch (format "%s Regulator" location-name2))
 
      (set-charge-rate charge-setter charge-power-ch kill-ch)
 

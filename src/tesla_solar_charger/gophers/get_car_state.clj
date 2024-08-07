@@ -26,35 +26,34 @@
    (if (:is-charging car-state) (format "charging at %.2fW" (float (:charge-power-watts car-state))) "not charging")))
 
 (defn fetch-new-car-state
-  [data-source output-ch kill-ch]
-  (let [log-prefix "fetch-new-car-state"]
-    (go
-      (log/info log-prefix "Process starting...")
-      (loop [sleep-for 0
-             last-car-state nil]
-        (let [timeout-ch (timeout (* 1000 sleep-for))
-              [val ch] (alts! [kill-ch timeout-ch])]
-          (if (= ch kill-ch)
-            (log/info log-prefix "Process dying...")
-            (let [result-ch (go (perform-and-return-error (partial get-latest-car-state data-source)))
-                  [val ch] (alts! [kill-ch result-ch])]
-              (if (= ch kill-ch)
-                (log/info log-prefix "Process dying...")
-                (let [{err :err car-state :val} val]
-                  (if (some? err)
+  [data-source output-ch kill-ch log-prefix]
+  (go
+    (log/info log-prefix "Process starting...")
+    (loop [sleep-for 0
+           last-car-state nil]
+      (let [timeout-ch (timeout (* 1000 sleep-for))
+            [val ch] (alts! [kill-ch timeout-ch])]
+        (if (= ch kill-ch)
+          (log/info log-prefix "Process dying...")
+          (let [result-ch (go (perform-and-return-error (partial get-latest-car-state data-source)))
+                [val ch] (alts! [kill-ch result-ch])]
+            (if (= ch kill-ch)
+              (log/info log-prefix "Process dying...")
+              (let [{err :err car-state :val} val]
+                (if (some? err)
+                  (do
+                    (log/error log-prefix (format "Failed to fetch car state; %s" (ex-message err)))
+                    (recur 60 last-car-state))
+                  (if (and (some? last-car-state)
+                           (not (is-car-state-newer? car-state last-car-state)))
                     (do
-                      (log/error log-prefix (format "Failed to fetch car state; %s" (ex-message err)))
+                      (log/info log-prefix "No new car state; sleeping for 60s")
                       (recur 60 last-car-state))
-                    (if (and (some? last-car-state)
-                             (not (is-car-state-newer? car-state last-car-state)))
-                      (do
-                        (log/info log-prefix "No new car state; sleeping for 60s")
-                        (recur 60 last-car-state))
-                      (do
-                        (log/info log-prefix (format "Received new car state: %s" (make-car-state-message car-state)))
-                        (>! output-ch car-state)
-                        (recur 10 car-state))))))))))
-      (log/info log-prefix "Process died"))))
+                    (do
+                      (log/info log-prefix (format "Received new car state: %s" (make-car-state-message car-state)))
+                      (>! output-ch car-state)
+                      (recur 10 car-state))))))))))
+    (log/info log-prefix "Process died")))
 
 (defn poll-latest-car-state
   [car output-ch kill-ch]
