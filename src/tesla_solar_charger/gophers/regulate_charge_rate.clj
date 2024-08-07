@@ -15,26 +15,22 @@
           (if (nil? val)
             (log/error log-prefix "Input channel was closed")
             (if (= ch car-state-ch)
-              (do
-                (log/info log-prefix "Regulating new car state")
-                (let [car-state val
-                      [regulator regulation] (make-regulation-from-new-car-state regulator car-state)
-                      message (:message regulation)
-                      new-charge-power-watts (:new-charge-power-watts regulation)]
-                  (when (some? new-charge-power-watts)
-                    (>! charge-power-ch new-charge-power-watts))
-                  (when (some? message)
-                    (log/info log-prefix message))
-                  (recur regulator)))
-              (do
-                (log/info log-prefix "Regulating new solar data")
-                (let [data-point val
-                      [regulator regulation] (make-regulation-from-new-data-point regulator data-point)
-                      message (:message regulation)
-                      new-charge-power-watts (:new-charge-power-watts regulation)]
-                  (when (some? new-charge-power-watts)
-                    (>! charge-power-ch new-charge-power-watts))
-                  (when (some? message)
-                    (log/info log-prefix message))
-                  (recur regulator))))))))
+              (let [car-state val
+                    [regulator regulation] (make-regulation-from-new-car-state regulator car-state)
+                    message (:message regulation)
+                    new-charge-power-watts (:new-charge-power-watts regulation)]
+                (when (some? new-charge-power-watts)
+                  (>! charge-power-ch new-charge-power-watts))
+                (when (some? message)
+                  (log/info log-prefix (format "Regulated new car state; %s" message)))
+                (recur regulator))
+              (let [data-point val
+                    [regulator regulation] (make-regulation-from-new-data-point regulator data-point)
+                    message (:message regulation)
+                    new-charge-power-watts (:new-charge-power-watts regulation)]
+                (when (some? new-charge-power-watts)
+                  (>! charge-power-ch new-charge-power-watts))
+                (when (some? message)
+                  (log/info log-prefix (format "Regulated new solar data; %s" message)))
+                (recur regulator)))))))
     (log/info log-prefix "Process died")))
