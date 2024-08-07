@@ -74,7 +74,7 @@
   (let [charge-power-watts (:charge-power-watts car-state)
         max-charge-power-watts (:max-charge-power-watts car-state)
         minutes-to-target-percent (get-minutes-until-charge-percent car-state target-percent)
-        minutes-per-watt (/ minutes-to-target-percent charge-power-watts)
+        minutes-per-watt (/ minutes-to-target-percent (if (= 0.0 charge-power-watts) 1 charge-power-watts))
         minutes-to-target-percent-at-max-rate (* minutes-per-watt max-charge-power-watts)]
     minutes-to-target-percent-at-max-rate))
 

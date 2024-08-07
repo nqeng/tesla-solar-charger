@@ -30,6 +30,11 @@
   [new-log-level]
   (reset! log-level new-log-level))
 
+(require
+    '[taoensso.timbre :as timbre
+      ;; Optional, just refer what you like:
+       ])
+
 (defn log
   ([message-level prefix message]
    (let [permitted-levels (get log-levels (deref log-level))]
@@ -56,7 +61,9 @@
     (catch Exception e nil)
     (catch clojure.lang.ExceptionInfo e nil)))
 
-(def info (partial log :info))
+(defn info [prefix message]
+  (timbre/info message)
+  )
 (def verbose (partial log :verbose))
 (def error (partial log :error))
 (defn notify

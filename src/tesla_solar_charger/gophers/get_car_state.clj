@@ -51,7 +51,7 @@
                       (log/info log-prefix "No new car state; sleeping for 60s")
                       (recur data-source 60 last-car-state))
                     (do
-                      (log/info log-prefix (format "Received new car state: %s" (make-car-state-message car-state)))
+                      (log/info log-prefix (make-car-state-message car-state))
                       (>! output-ch car-state)
                       (recur data-source 10 car-state))))))))))
     (log/info log-prefix "Process died")))

@@ -28,30 +28,31 @@
   [data-source output-ch kill-ch log-prefix]
   (go
     (log/info log-prefix "Process starting...")
-    (loop [sleep-for 0
+    (loop [data-source data-source
+           sleep-for 0
            last-data-point nil]
       (let [timeout-ch (timeout (* 1000 sleep-for))
             [val ch] (alts! [kill-ch timeout-ch])]
         (if (= ch kill-ch)
           (log/info log-prefix "Process dying...")
-          (let [result-ch (go (perform-and-return-error (partial get-latest-data-point data-source)))
+          (let [result-ch (go (get-latest-data-point data-source))
                 [val ch] (alts! [kill-ch result-ch])]
             (if (= ch kill-ch)
               (log/info log-prefix "Process dying...")
-              (let [{err :err data-point :val} val]
+              (let [{err :err data-source :obj data-point :val} val]
                 (if (some? err)
                   (do
                     (log/error log-prefix (format "Failed to fetch solar data; %s" (ex-message err)))
-                    (recur 10 last-data-point))
+                    (recur data-source 10 last-data-point))
                   (if (and (some? last-data-point)
                            (not (is-data-point-newer? data-point last-data-point)))
                     (do
                       (log/info log-prefix "No new solar data")
-                      (recur 10 last-data-point))
+                      (recur data-source 10 last-data-point))
                     (do
-                      (log/info log-prefix (format "Fetched new solar data: %s" (make-data-point-message data-point)))
+                      (log/info log-prefix (make-data-point-message data-point))
                       (>! output-ch data-point)
-                      (recur 10 data-point))))))))))
+                      (recur data-source 10 data-point))))))))))
     (log/info log-prefix "Process died")))
 
 (defn fetch-latest-solar-data
