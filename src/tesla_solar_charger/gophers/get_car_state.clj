@@ -22,7 +22,7 @@
 (defn fetch-new-car-state
   [data-source output-ch kill-ch prefix]
   (go
-    (infof "[%s] Process starting..." prefix)
+    (infof "[%s] Process started" prefix)
     (loop [data-source data-source
            sleep-for 0
            ?last-car-state nil]
@@ -50,15 +50,16 @@
           (infof "[%s] No new car state; sleeping for 30s" prefix)
           (recur data-source 30 ?last-car-state))
 
-        :do (infof "[%s] %s" (make-car-state-message car-state))
-        :do (debugf "[%s] Putting value on channel...")
+        :do (infof "[%s] %s" prefix (make-car-state-message car-state))
+        :do (debugf "[%s] Putting value on channel..." prefix)
 
         :let [success (>! output-ch car-state)]
 
-        (false? success) (errorf "[%s] Output channel was closed")
+        (false? success) (errorf "[%s] Output channel was closed" prefix)
 
         :do (debugf "[%s] Put value on channel" prefix)
 
         (recur data-source 30 car-state)))
-    (infof "[%s] Process died" prefix)))
+
+    (infof "[%s] Process ended" prefix)))
 

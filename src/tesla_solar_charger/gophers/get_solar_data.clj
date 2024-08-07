@@ -57,5 +57,6 @@
         :do (debugf "[%s] Put value on channel" prefix)
 
         (recur data-source 30 data-point)))
+
     (infof "[%s] Process ended" prefix)))
 
