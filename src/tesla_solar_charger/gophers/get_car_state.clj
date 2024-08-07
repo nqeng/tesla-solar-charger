@@ -1,18 +1,9 @@
 (ns tesla-solar-charger.gophers.get-car-state
   (:require
    [tesla-solar-charger.log :as log]
+   [taoensso.timbre :as timbre]
    [tesla-solar-charger.car-data-source.car-data-source :refer [get-latest-car-state]]
    [clojure.core.async :refer [>! close! timeout alts! chan go]]))
-
-(defn perform-and-return-error
-  [foo]
-  (try
-    (let [result (foo)]
-      {:err nil :val result})
-    (catch clojure.lang.ExceptionInfo err
-      {:err err :val nil})
-    (catch Exception err
-      {:err err :val nil})))
 
 (defn is-car-state-newer?
   [car-state last-car-state]
@@ -27,82 +18,37 @@
 
 (defn fetch-new-car-state
   [data-source output-ch kill-ch log-prefix]
-  (go
-    (log/info log-prefix "Process starting...")
-    (loop [data-source data-source
-           sleep-for 0
-           last-car-state nil]
-      (let [timeout-ch (timeout (* 1000 sleep-for))
-            [val ch] (alts! [kill-ch timeout-ch])]
-        (if (= ch kill-ch)
-          (log/info log-prefix "Process dying...")
-          (let [result-ch (go (get-latest-car-state data-source))
-                [val ch] (alts! [kill-ch result-ch])]
-            (if (= ch kill-ch)
-              (log/info log-prefix "Process dying...")
-              (let [{err :err car-state :val data-source :obj} val]
-                (if (some? err)
-                  (do
-                    (log/error log-prefix (format "Failed to fetch car state; %s" (ex-message err)))
-                    (recur data-source 60 last-car-state))
-                  (if (and (some? last-car-state)
-                           (not (is-car-state-newer? car-state last-car-state)))
-                    (do
-                      (log/info log-prefix "No new car state; sleeping for 60s")
-                      (recur data-source 60 last-car-state))
-                    (do
-                      (log/info log-prefix (make-car-state-message car-state))
-                      (>! output-ch car-state)
-                      (recur data-source 10 car-state))))))))))
-    (log/info log-prefix "Process died")))
-
-(defn poll-latest-car-state
-  [car output-ch kill-ch]
-  (let [log-prefix "poll-latest-car-state"]
+  (letfn [(info [msg] (timbre/info (format "[%s]" log-prefix) msg))
+          (error [msg] (timbre/error (format "[%s]" log-prefix) msg))
+          (debug [msg] (timbre/debug (format "[%s]" log-prefix) msg))]
     (go
-      (log/info log-prefix "Process starting...")
-      (loop [sleep-for 0]
-        (let [result-ch (go
-                          (Thread/sleep sleep-for)
-                          (perform-and-return-error (partial get-latest-car-state car)))
-              [val ch] (alts! [kill-ch result-ch])]
+      (info "Process starting...")
+      (loop [data-source data-source
+             sleep-for 0
+             last-car-state nil]
+        (let [timeout-ch (timeout (* 1000 sleep-for))
+              [val ch] (alts! [kill-ch timeout-ch])]
           (if (= ch kill-ch)
-            (log/info log-prefix "Process dying...")
-            (let [{err :err car-state :val} val]
-              (if (some? err)
-                (do
-                  (log/error log-prefix (format "Failed to fetch car state; %s" (ex-message err)))
-                  (recur 10000))
-                (do
-                  (log/verbose log-prefix "Fetched car state")
-                  (>! output-ch car-state)
-                  (recur 10000)))))))
-      (log/info log-prefix "Process died"))))
-
-(defn filter-new-car-state
-  [input-ch output-ch kill-ch]
-  (let [log-prefix "filter-new-car-state"]
-    (go
-      (log/info log-prefix "Process starting...")
-      (loop [last-car-state nil]
-        (let [[val ch] (alts! [kill-ch input-ch])]
-          (if (= ch kill-ch)
-            (log/info log-prefix "Process dying...")
-            (let [car-state val]
-              (if (and (some? last-car-state)
-                       (not (is-car-state-newer? car-state last-car-state)))
-                (do
-                  (log/verbose log-prefix "No new car state")
-                  (recur last-car-state))
-                (do
-                  (log/info log-prefix (format "Received new car state: %s" (make-car-state-message car-state)))
-                  (>! output-ch car-state)
-                  (recur car-state)))))))
-      (log/info log-prefix "Process died"))))
-
-#_(defn fetch-new-car-state
-  [data-source output-ch kill-ch]
-  (let [latest-car-state-ch (chan)]
-    (poll-latest-car-state data-source latest-car-state-ch kill-ch)
-    (filter-new-car-state latest-car-state-ch output-ch kill-ch)))
+            (info "Process dying...")
+            (let [result-ch (go (get-latest-car-state data-source))
+                  [val ch] (alts! [kill-ch result-ch])]
+              (if (= ch kill-ch)
+                (info "Process dying...")
+                (let [{err :err car-state :val data-source :obj} val]
+                  (if (some? err)
+                    (do
+                      (error (format "Failed to fetch car state; %s" (ex-message err)))
+                      (recur data-source 30 last-car-state))
+                    (if (and (some? last-car-state)
+                             (not (is-car-state-newer? car-state last-car-state)))
+                      (do
+                        (info "No new car state; sleeping for 30s")
+                        (recur data-source 30 last-car-state))
+                      (do
+                        (info (make-car-state-message car-state))
+                        (debug "Putting value on channel...")
+                        (>! output-ch car-state)
+                        (debug "Put value on channel")
+                        (recur data-source 30 car-state))))))))))
+      (info "Process died"))))
 

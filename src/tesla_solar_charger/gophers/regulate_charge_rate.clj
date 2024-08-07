@@ -6,31 +6,38 @@
 
 (defn regulate-charge-rate
   [regulator car-state-ch data-point-ch charge-power-ch kill-ch log-prefix]
-  (go
-    (log/info log-prefix "Process starting...")
-    (loop [regulator regulator]
-      (let [[val ch] (alts! [kill-ch car-state-ch data-point-ch])]
-        (if (= ch kill-ch)
-          (log/info log-prefix "Process dying...")
-          (if (nil? val)
-            (log/error log-prefix "Input channel was closed")
-            (if (= ch car-state-ch)
-              (let [car-state val
-                    [regulator regulation] (make-regulation-from-new-car-state regulator car-state)
-                    message (:message regulation)
-                    new-charge-power-watts (:new-charge-power-watts regulation)]
-                (when (some? new-charge-power-watts)
-                  (>! charge-power-ch new-charge-power-watts))
-                (when (some? message)
-                  (log/info log-prefix (format "Regulated new car state; %s" message)))
-                (recur regulator))
-              (let [data-point val
-                    [regulator regulation] (make-regulation-from-new-data-point regulator data-point)
-                    message (:message regulation)
-                    new-charge-power-watts (:new-charge-power-watts regulation)]
-                (when (some? new-charge-power-watts)
-                  (>! charge-power-ch new-charge-power-watts))
-                (when (some? message)
-                  (log/info log-prefix (format "Regulated new solar data; %s" message)))
-                (recur regulator)))))))
-    (log/info log-prefix "Process died")))
+  (letfn [(info [msg] (timbre/info (format "[%s]" log-prefix) msg))
+          (error [msg] (timbre/error (format "[%s]" log-prefix) msg))
+          (debug [msg] (timbre/debug (format "[%s]" log-prefix) msg))]
+    (go
+      (info "Process starting...")
+      (loop [regulator regulator]
+        (let [[val ch] (alts! [kill-ch car-state-ch data-point-ch])]
+          (if (= ch kill-ch)
+            (info "Process dying...")
+            (if (nil? val)
+              (error "Input channel was closed")
+              (if (= ch car-state-ch)
+                (let [car-state val
+                      [regulator regulation] (make-regulation-from-new-car-state regulator car-state)
+                      message (:message regulation)
+                      new-charge-power-watts (:new-charge-power-watts regulation)]
+                  (when (some? new-charge-power-watts)
+                    (debug "Putting val on channel...")
+                    (>! charge-power-ch new-charge-power-watts)
+                    (debug "Put val on channel"))
+                  (when (some? message)
+                    (info (format "Regulated new car state; %s" message)))
+                  (recur regulator))
+                (let [data-point val
+                      [regulator regulation] (make-regulation-from-new-data-point regulator data-point)
+                      message (:message regulation)
+                      new-charge-power-watts (:new-charge-power-watts regulation)]
+                  (when (some? new-charge-power-watts)
+                    (debug "Putting value on channel...")
+                    (>! charge-power-ch new-charge-power-watts)
+                    (debug "Put value on channel"))
+                  (when (some? message)
+                    (info (format "Regulated new solar data; %s" message)))
+                  (recur regulator)))))))
+      (info "Process died"))))
