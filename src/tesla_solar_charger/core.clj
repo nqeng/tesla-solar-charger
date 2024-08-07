@@ -96,7 +96,7 @@
 
     (regulate-charge-rate regulator2 car-state-ch3 solar-data-ch2 charge-power-ch kill-ch (format "%s Regulator" location-name2))
 
-    (set-charge-rate charge-setter charge-power-ch kill-ch)
+    (set-charge-rate charge-setter charge-power-ch kill-ch "Tessie Charger Setter")
 
     (while true)
 
