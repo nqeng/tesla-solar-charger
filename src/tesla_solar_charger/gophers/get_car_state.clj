@@ -1,6 +1,5 @@
 (ns tesla-solar-charger.gophers.get-car-state
   (:require
-   [tesla-solar-charger.log :as log]
    [taoensso.timbre :as timbre]
    [tesla-solar-charger.car-data-source.car-data-source :refer [get-latest-car-state]]
    [clojure.core.async :refer [>! close! timeout alts! chan go]]))

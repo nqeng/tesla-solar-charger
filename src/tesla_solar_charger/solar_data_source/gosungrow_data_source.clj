@@ -1,7 +1,6 @@
 (ns tesla-solar-charger.solar-data-source.gosungrow-data-source
   (:require
    [cheshire.core :as json]
-   [tesla-solar-charger.log :as log]
    [tesla-solar-charger.solar-data-source.solar-data-source :refer [make-data-point IDataSource]]
    [clojure.java.shell :refer [sh]]
    [tesla-solar-charger.utils :as utils]))

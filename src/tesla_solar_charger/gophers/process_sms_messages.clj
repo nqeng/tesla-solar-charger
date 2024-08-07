@@ -1,7 +1,7 @@
 (ns tesla-solar-charger.gophers.process-sms-messages
   (:require
    [cheshire.core :as json]
-   [tesla-solar-charger.log :as log]
+   [taoensso.timbre :as timbre]
    [tesla-solar-charger.utils :as utils]
    [clojure.core.async :refer [go >! alts!]]
    [clj-http.client :as client]))
@@ -57,13 +57,15 @@
       {:err err :val nil})))
 
 (defn fetch-new-sms-messages
-  [clicksend-username clicksend-api-key output-ch kill-ch]
-  (let [log-prefix "process-sms-messages"]
+  [clicksend-username clicksend-api-key output-ch kill-ch log-prefix]
+  (letfn [(info [msg] (timbre/info (format "[%s]" log-prefix) msg))
+          (error [msg] (timbre/error (format "[%s]" log-prefix) msg))
+          (debug [msg] (timbre/debug (format "[%s]" log-prefix) msg))]
     (go
-      (log/info log-prefix "Process starting...")
+      (info "Process starting...")
       (try
         (mark-all-as-read clicksend-username clicksend-api-key)
-        (log/info log-prefix "Marked old messages as read")
+        (info "Marked old messages as read")
         (loop [sleep-for 0]
           (let [func (partial get-sms-messages clicksend-username clicksend-api-key)
                 result-ch (go
@@ -71,33 +73,35 @@
                             (perform-and-return-error func))
                 [val ch] (alts! [kill-ch result-ch])]
             (if (= ch kill-ch)
-              (log/info log-prefix "Process dying...")
+              (info "Process dying...")
               (let [{err :err messages :val} val]
                 (if (some? err)
                   (do
-                    (log/error log-prefix (format "Failed to fetch messages; %s" (ex-message err)))
+                    (error (format "Failed to fetch messages; %s" (ex-message err)))
                     (recur 10000))
                   (if (empty? messages)
                     (do
-                      (log/info log-prefix "No new messages")
+                      (info "No new messages")
                       (recur 10000))
                     (do
-                      (log/info log-prefix (format "Fetched %s messages" (count messages)))
+                      (info (format "Fetched %s messages" (count messages)))
                       (try
                         (mark-all-as-read clicksend-username clicksend-api-key)
-                        (log/info log-prefix "Marked messages as read")
+                        (info "Marked messages as read")
                         (catch clojure.lang.ExceptionInfo e
-                          (log/error log-prefix (format "Failed to mark messages as read; %s" (ex-message e))))
+                          (error (format "Failed to mark messages as read; %s" (ex-message e))))
                         (catch Exception e
-                          (log/error log-prefix (format "Failed to mark messages as read; %s" (ex-message e)))))
+                          (error (format "Failed to mark messages as read; %s" (ex-message e)))))
                       (doseq [message messages]
                         (>! output-ch message))
                       (recur 10000))))))))
         (catch clojure.lang.ExceptionInfo e
-          (log/error (format log-prefix "Failed to mark old messages as read; %s" (ex-message e))))
+          (error (format "Failed to mark old messages as read; %s" (ex-message e))))
         (catch Exception e
-          (log/error (format log-prefix "Failed to mark old messages as read; %s" (ex-message e)))))
-      (log/info log-prefix "Process died"))))
+          (error (format "Failed to mark old messages as read; %s" (ex-message e)))))
+      (info "Process died"))
+    )
+  )
 
 #_(defrecord SetPowerBuffer [set-settings-chan get-settings-chan car car-state-chan solar-sites]
 

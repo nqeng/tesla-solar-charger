@@ -1,6 +1,5 @@
 (ns tesla-solar-charger.gophers.get-solar-data
   (:require
-   [tesla-solar-charger.log :as log]
    [taoensso.timbre :as timbre]
    [tesla-solar-charger.solar-data-source.solar-data-source :refer [get-latest-data-point]]
    [clojure.core.async :refer [>! alts! timeout chan go close!]]))

@@ -1,7 +1,7 @@
 (ns tesla-solar-charger.gophers.utils
   (:require
+   [taoensso.timbre :as timbre]
    [tesla-solar-charger.utils :as utils]
-   [tesla-solar-charger.log :as log]
    [clojure.core.async :as async]))
 
 (defn timer
@@ -17,10 +17,7 @@
   ([format-str input-ch]
    (async/go-loop []
      (when-some [val (async/<! input-ch)]
-       (log/info (format format-str
-                         (if (satisfies? utils/Printable val)
-                           (utils/string-this val)
-                           (str val))))
+       (timbre/info val)
        (recur))))
   ([input-ch]
    (print-values "%s" input-ch)))

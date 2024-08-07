@@ -1,6 +1,6 @@
 (ns tesla-solar-charger.gophers.regulate-charge-rate
   (:require
-   [tesla-solar-charger.log :as log]
+   [taoensso.timbre :as timbre]
    [tesla-solar-charger.regulator.regulator :refer [make-regulation-from-new-car-state make-regulation-from-new-data-point]]
    [clojure.core.async :as async :refer [close! chan alts! >! go]]))
 
