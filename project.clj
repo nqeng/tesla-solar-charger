@@ -1,4 +1,4 @@
-(defproject tesla-solar-charger "1.0.3"
+(defproject tesla-solar-charger "1.0.4"
   :description "FIXME: write description"
   :url "https://github.com/nqeng/tesla-solar-charger"
   :license {:name "EPL-2.0 OR GPL-2.0-or-later WITH Classpath-exception-2.0"
