@@ -14,7 +14,7 @@
    [tesla-solar-charger.gophers.regulate-charge-rate :refer [regulate-charge-rate]]
    [tesla-solar-charger.gophers.utils :refer [sliding-buffer split-ch split-channel keep-last-value print-values] :rename {sliding-buffer my-sliding-buffer}]
    [tesla-solar-charger.car-data-source.tessie-data-source :refer [new-TessieDataSource]]
-   [tesla-solar-charger.data-source.gosungrow-data-source :refer [new-GoSungrowDataSource]]
+   [tesla-solar-charger.solar-data-source.gosungrow-data-source :refer [new-GoSungrowDataSource]]
    [tesla-solar-charger.gophers.get-solar-data :refer [fetch-new-solar-data]]
    [clojure.core.async :as async :refer [close! chan sliding-buffer]]))
 
