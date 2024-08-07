@@ -29,7 +29,7 @@
                       :key locationiq-auth-token}
         response (client/get url {:query-params query-params 
                                   :accept :json})
-        json-object (json/parse-string (:body response)) ]
+        json-object (json/parse-string (:body response))]
     json-object))
 
 (defn get-readable-location-name
@@ -88,11 +88,16 @@
 (defrecord TessieDataSource []
   ICarDataSource
   (get-latest-car-state [data-source]
-    (let [vehicle-vin (:vehicle-vin data-source)
+    (try
+      (let [vehicle-vin (:vehicle-vin data-source)
           tessie-auth-token (:tessie-auth-token data-source)
           locationiq-auth-token (:locationiq-auth-token data-source)
           car-state (get-latest-car-state vehicle-vin tessie-auth-token locationiq-auth-token)]
-      car-state)))
+      {:obj data-source :val car-state :err nil})
+      (catch clojure.lang.ExceptionInfo err
+        {:obj data-source :val nil :err err})
+      (catch Exception err
+        {:obj data-source :val nil :err err}))))
 
 (defn new-TessieDataSource
   [vehicle-vin tessie-auth-token locationiq-auth-token]

@@ -19,7 +19,7 @@
 
 (defrecord DummyTesla []
   ICarDataSource
-  (get-latest-car-state [_] (get-car-state)))
+  (get-latest-car-state [data-source] {:obj data-source :err nil :val (get-car-state)}))
 
 (defn new-DummyTesla
   []
