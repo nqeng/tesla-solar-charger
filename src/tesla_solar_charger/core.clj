@@ -38,6 +38,13 @@
 
 (def settings-filepath (.getAbsolutePath (clojure.java.io/file (getenv "SETTINGS_FILEPATH"))))
 
+(defn send-to-ntfy
+  [channel-name message]
+  (try
+    (client/post (format "https://ntfy.sh/%s" channel-name) message)
+    (catch Exception e nil)
+    (catch clojure.lang.ExceptionInfo e nil)))
+
 (def settings (duratom :local-file
                        :file-path settings-filepath
                        :init {}))
