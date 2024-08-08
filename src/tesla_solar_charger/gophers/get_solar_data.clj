@@ -45,6 +45,7 @@
 
           (= kill-ch ch) (infof "[%s] Received kill signal" prefix)
 
+          :do (debugf "[%s] Fetching latest data point..." prefix)
           :let [result-ch (go (get-latest-data-point data-source))]
           :let [[val ch] (alts! [kill-ch result-ch])]
 

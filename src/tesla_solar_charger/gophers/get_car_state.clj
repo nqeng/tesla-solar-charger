@@ -48,6 +48,7 @@
 
           (= kill-ch ch) (infof "[%s] Received kill signal" prefix)
 
+          :do (debugf "[%s] Fetching latest car state..." prefix)
           :let [result-ch (go (get-latest-car-state data-source))]
           :let [[val ch] (alts! [kill-ch result-ch])]
 
