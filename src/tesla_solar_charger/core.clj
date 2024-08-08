@@ -80,8 +80,8 @@
         location {:latitude location-latitude :longitude location-longitude :name location-name}
         location-name2 (getenv "LOCATION_NAME2")
         location2 {:latitude location-latitude2 :longitude location-longitude2 :name location-name2}
-        regulator (new-TargetRegulator car-name location (partial deref settings))
-        regulator2 (new-TargetRegulator car-name location2 (partial deref settings))
+        regulator (new-TargetRegulator car-name location #(deref settings))
+        regulator2 (new-TargetRegulator car-name location2 #(deref settings))
         car-state-ch (chan)
         car-state-ch2 (chan)
         car-state-ch3 (chan)
