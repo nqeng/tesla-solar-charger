@@ -3,7 +3,7 @@
     [cheshire.core :as json]
     [taoensso.timbre :as timbre :refer [infof errorf debugf]]
     [better-cond.core :refer [cond] :rename {cond better-cond}]
-    [clojure.core.async :refer [>! close! onto-chan timeout alts! chan <! go]]
+    [clojure.core.async :refer [>! close! onto-chan! timeout alts! chan <! go]]
     [clj-http.client :as client]))
 
 (defn get-sms-messages
@@ -100,7 +100,7 @@
           (let [next-poll-time (time-after-seconds 30)]
             (errorf "[%s] Failed to fetch messages; %s" prefix err)
             (debugf "[%s] Sleeping until %s" prefix next-poll-time)
-            (recur data-source next-poll-time ?last-car-state))
+            (recur next-poll-time))
 
           (empty? messages) 
           (let [next-poll-time (time-after-seconds 30)]
@@ -153,8 +153,8 @@
     :else       num))
 
 (defn kill
-  [message settings kill-ch prefix]
-  (if (some? (re-find #"^[kK]ill$" body))
+  [text settings kill-ch prefix]
+  (if (some? (re-find #"^[kK]ill$" text))
     (do
       (infof "[%s] Sending kill signal..." prefix)
       (close! kill-ch)
@@ -163,48 +163,52 @@
 
 (defn power-buffer
   [text settings kill-ch prefix]
-  (if-some? [match (re-find #"^[bB]uffer +(-?\d+)$" text)
-             buffer-watts (parse-double (second match))]
-            (do
-              (swap! settings #(assoc % :power-buffer-watts buffer-watts))
-              (infof "[%s] Set power buffer to %.2fW" prefix buffer-watts)
-              true)
-            false))
+  (if-some [match (re-find #"^[bB]uffer +(-?\d+)$" text)]
+    (if-some [buffer-watts (parse-double (second match))]
+      (do
+        (swap! settings #(assoc % :power-buffer-watts buffer-watts))
+        (infof "[%s] Set power buffer to %.2fW" prefix buffer-watts)
+        true)
+      false)
+    false))
 
 (defn target-percent
   [text settings kill-ch prefix]
-  (if-some? [match (re-find #"^[pP]ercent +(\d\d?\d?)$" text)
-             percent (parse-double (second match))]
-            (do
-              (swap! settings #(assoc % :target-percent percent))
-              (infof "[%s] Set target percent to %d%%" prefix percent)
-              true)
-            false))
+  (if-some [match (re-find #"^[pP]ercent +(\d\d?\d?)$" text)]
+    (if-some [percent (parse-double (second match))]
+      (do
+        (swap! settings #(assoc % :target-percent percent))
+        (infof "[%s] Set target percent to %d%%" prefix percent)
+        true)
+      false)
+    false))
 
 (defn target-time
   [text settings kill-ch prefix]
-  (if-some? [match (re-find #"^[tT]ime +(\d\d?):(\d\d)$" text)
-             hour (parse-long (second match))
-             minute (parse-long (last match))]
-            (cond
-              (> hour 24) false
-              (< hour 0) false
-              (> minute 60) false
-              (< minute 0) false
+  (if-some [match (re-find #"^[tT]ime +(\d\d?):(\d\d)$" text)]
+    (if-some [hour (parse-long (second match))]
+      (if-some [minute (parse-long (last match))]
+        (cond
+          (> hour 24) false
+          (< hour 0) false
+          (> minute 60) false
+          (< minute 0) false
 
-              :else
-              (do
-                (swap! settings #(assoc % :target-hour hour))
-                (swap! settings #(assoc % :target-minute minute))
-                (infof "[%s] Set target time to %02d:%02d" prefix value)
-                true))
+          :else
+          (do
+            (swap! settings #(assoc % :target-hour hour))
+            (swap! settings #(assoc % :target-minute minute))
+            (infof "[%s] Set target time to %02d:%02d" prefix hour minute)
+            true))
+        false)
+      false)
     false))
 
 (defn process-message
   [message settings kill-ch prefix]
   (better-cond
 
-    :let [body (get sms "body")]
+    :let [body (get message "body")]
 
     (nil? body) false
 
@@ -252,53 +256,6 @@
           (recur)))
 
       (infof "[%s] Process ended" prefix))))
-
-(defrecord SetTargetTime [set-settings-chan get-settings-chan car car-state-chan solar-sites]
-
-    sms/SMSProcessor
-
-    (process-sms
-      [processor sms]
-      (try
-        (better-cond
-          :let [body (get sms "body")
-                match (re-find #"^\s*[tT]ime\s+(\d\d?):(\d\d?)\s*$" body)
-                target-hour (Integer/parseInt (get match 1))
-                target-minute (Integer/parseInt (get match 2))]
-
-          :do (-> (java.time.LocalDateTime/now)
-                  (.withHour target-hour)
-                  (.withMinute target-minute)
-                  (.withSecond 0)
-                  (.withNano 0))
-
-          :let [car-state (async/<!! car-state-chan)]
-
-          (nil? car-state)
-          (throw (ex-info "Channel closed" {}))
-
-          :let [current-site (first (filter #(site/is-car-here? % car-state) solar-sites))]
-
-          (nil? current-site)
-          false
-
-          :let [settings-key (str (site/get-id current-site) (car/get-vin car))
-                settings-action (fn [settings]
-                                  (-> settings
-                                      (assoc-in [settings-key "target_time_hour"] target-hour)
-                                      (assoc-in [settings-key "target_time_minute"] target-minute)))]
-          (and (some? settings-action)
-               (false? (async/>!! set-settings-chan settings-action)))
-          (throw (ex-info "Channel closed" {}))
-
-          :else
-          true)
-        (catch NumberFormatException e
-          false)
-        (catch java.time.DateTimeException e
-          false)
-        (catch NullPointerException e
-          false))))
 
 #_(defrecord SetMaxClimb [set-settings-chan get-settings-chan car car-state-chan solar-sites]
 

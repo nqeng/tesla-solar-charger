@@ -130,17 +130,6 @@
         home-location {:latitude home-latitude 
                        :longitude home-longitude 
                        :name home-name}
-
-        office-regulator (new-TargetRegulator 
-                           tesla-name 
-                           office-location 
-                           #(deref settings))
-
-        home-regulator (new-TargetRegulator 
-                         tesla-name 
-                         home-location 
-                         #(deref settings))
-
         tesla-state-ch (chan)
         tesla-state-ch2 (chan)
         tesla-state-ch3 (chan)
@@ -155,7 +144,21 @@
         home-solar-data-ch2 (chan)
         home-solar-data-ch3 (chan)
 
-        charge-power-ch (chan (sliding-buffer 1))]
+        charge-power-ch (chan (sliding-buffer 1))
+        
+        office-regulator (new-TargetRegulator 
+                           tesla-name 
+                           office-location 
+                           #(deref settings)
+                           charge-power-ch
+                           (format "%s Regulator" office-name))
+
+        home-regulator (new-TargetRegulator 
+                         tesla-name 
+                         home-location 
+                         #(deref settings)
+                         charge-power-ch
+                         (format "%s Regulator" home-name))]
 
     (.addShutdownHook (Runtime/getRuntime) (Thread. shutdown-hook))
 

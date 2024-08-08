@@ -2,7 +2,7 @@
   (:require
     [taoensso.timbre :as timbre :refer [infof errorf debugf]]
     [better-cond.core :refer [cond] :rename {cond better-cond}]
-    [tesla-solar-charger.regulator.regulator :refer [make-regulation-from-new-car-state make-regulation-from-new-data-point]]
+    [tesla-solar-charger.regulator.regulator :refer [regulate-new-car-state regulate-new-data-point]]
     [clojure.core.async :as async :refer [close! chan alts! >! go]]))
 
 (defn regulate-charge-rate
@@ -26,47 +26,13 @@
           (= ch data-point-ch)
           (better-cond
             :let [data-point val]
-            :let [[regulator regulation] (make-regulation-from-new-data-point regulator data-point)]
-            :let [message (:message regulation)]
-            :let [?new-charge-power-watts (:?new-charge-power-watts regulation)]
-
-            :do (infof "[%s] Regulated new solar data; %s" prefix message)
-
-            (nil? ?new-charge-power-watts) (recur regulator)
-
-            :do (debugf "[%s] Putting value on channel..." prefix)
-
-            :let [[val ch] (alts! [[charge-power-ch ?new-charge-power-watts] kill-ch])]
-
-            (= kill-ch ch) (infof "[%s] Received kill signal" prefix)
-
-            (false? val) (errorf "[%s] Output channel was closed" prefix)
-
-            :do (debugf "[%s] Put value on channel" prefix)
-
+            :let [regulator (regulate-new-data-point regulator data-point)]
             (recur regulator))
 
           :else
           (better-cond
             :let [car-state val]
-            :let [[regulator regulation] (make-regulation-from-new-car-state regulator car-state)]
-            :let [message (:message regulation)]
-            :let [?new-charge-power-watts (:?new-charge-power-watts regulation)]
-
-            :do (infof "[%s] Regulated new car state; %s" prefix message)
-
-            (nil? ?new-charge-power-watts) (recur regulator)
-
-            :do (debugf "[%s] Putting value on channel..." prefix)
-
-            :let [[val ch] (alts! [[charge-power-ch ?new-charge-power-watts] kill-ch])]
-
-            (= kill-ch ch) (infof "[%s] Received kill signal" prefix)
-
-            (false? val) (errorf "[%s] Output channel was closed" prefix)
-
-            :do (debugf "[%s] Put value on channel" prefix)
-
+            :let [regulator (regulate-new-car-state regulator car-state)]
             (recur regulator))))
 
       (infof "[%s] Process ended" prefix))))
