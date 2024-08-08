@@ -9,6 +9,7 @@
     [tesla-solar-charger.gophers.set-charge-rate :refer [set-charge-rate]]
     [better-cond.core :refer [cond] :rename {cond better-cond}]
     [tesla-solar-charger.utils :as utils]
+    [clj-http.client :as client]
     [duratom.core :refer [duratom]]
     [taoensso.timbre :as timbre]
     [clojure.java.io :refer [make-parents]]
@@ -25,6 +26,31 @@
 (timbre/merge-config!
   {:appenders {:spit (appenders/spit-appender {:fname log-filename})}})
 
+(defn ntfy
+  [channel-name message]
+  (let [url (format "https://ntfy.sh/%s" channel-name)]
+    (try
+      (client/post url {:body message})
+      (catch Exception _)
+      (catch clojure.lang.ExceptionInfo _))))
+
+(def ntfy-channel-name (getenv "NTFY_CHANNEL_NAME"))
+
+(defn timbre-ntfy [data] 
+  (let [{:keys [vargs]} data
+        message (apply str vargs)]
+    (ntfy ntfy-channel-name message)))
+
+(def ntfy-appender
+  {:min-level :error
+   :enabled? true
+   :async? true
+   :fn timbre-ntfy
+   })
+
+(timbre/merge-config!
+  {:appenders {:ntfy ntfy-appender}})
+
 (try 
   (clojure.java.io/delete-file log-filename)
   (catch java.io.IOException _))
@@ -38,22 +64,15 @@
 
 (def settings-filepath (.getAbsolutePath (clojure.java.io/file (getenv "SETTINGS_FILEPATH"))))
 
-(defn ntfy
-  [channel-name message]
-  (try
-    (client/post (format "https://ntfy.sh/%s" channel-name) message)
-    (catch Exception _)
-    (catch clojure.lang.ExceptionInfo _)))
-
 (def settings (duratom :local-file
                        :file-path settings-filepath
                        :init {}))
 
 (defn -main
   [& args]
-  (timbre/info "Starting...")
+  (timbre/warn "[Main] Starting...")
   (let [kill-ch (chan)
-        shutdown-hook (fn [] (timbre/info "Sending kill signal...") (close! kill-ch))
+        shutdown-hook (fn [] (timbre/warn "[Main] Sending kill signal...") (close! kill-ch))
         tesla-vin (getenv "TESLA_VIN")
         tessie-auth-token (getenv "TESSIE_AUTH_TOKEN")
         script-filepath (getenv "GOSUNGROW_SCRIPT_FILEPATH")
