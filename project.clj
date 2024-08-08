@@ -5,14 +5,10 @@
             :url "https://www.eclipse.org/legal/epl-2.0/"}
   :dependencies [
                  [com.taoensso/timbre "6.5.0"]
-                 [org.clojure/tools.cli "1.0.219"]
-                 [clj-time "0.15.2"]
                  [duratom "0.5.9"]
                  [org.clojure/clojure "1.11.1"]
                  [clj-http "3.12.3"]
                  [cheshire "5.11.0"]
-                 [lynxeyes/dotenv "1.1.0"]
-                 [org.clojure/data.priority-map "1.1.0"]
                  [org.clojure/core.async "1.6.681"]
                  [better-cond "2.1.5"]
                  [etaoin "1.0.40"]
