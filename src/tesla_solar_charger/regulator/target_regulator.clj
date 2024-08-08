@@ -175,7 +175,9 @@
               power-buffer-watts
               max-climp-watts
               max-drop-watts)
-            message (format "Excess power is %.2fW" excess-power-watts)]
+            message (format "Excess power is %.2fW; Car should charge at %.2fW" 
+                            excess-power-watts 
+                            new-charge-power-watts)]
         (make-regulation new-charge-power-watts message)))))
 
 (def default-settings
