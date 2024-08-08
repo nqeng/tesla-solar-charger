@@ -54,8 +54,7 @@
   {:min-level :warn
    :enabled? true
    :async? true
-   :fn timbre-ntfy
-   })
+   :fn timbre-ntfy})
 
 (timbre/merge-config!
   {:appenders {:ntfy ntfy-appender}})
