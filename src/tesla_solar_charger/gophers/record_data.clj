@@ -24,7 +24,7 @@
     output-ch))
 
 (defn record-data
-  [recorder car-state-ch data-point-ch kill-ch prefix]
+  [recorder location car-state-ch data-point-ch kill-ch prefix]
   (let [timer-ch (timer 60 kill-ch)]
     (close! 
       (go
@@ -44,13 +44,19 @@
 
             (nil? val) (errorf "[%s] Input channel was closed" prefix)
 
-            (= car-state-ch ch) (recur recorder val ?last-data-point)
+            (= car-state-ch ch) 
+            (do
+              (debugf "[%s] Received new car state" prefix)
+              (recur recorder val ?last-data-point))
 
-            (= data-point-ch ch) (recur recorder ?last-car-state val)
+            (= data-point-ch ch) 
+            (do 
+              (debugf "[%s] Received new data point" prefix)
+              (recur recorder ?last-car-state val))
 
             :do (infof "[%s] Recording data..." prefix)
 
-            :let [result-ch (go (recorder/record-data recorder ?last-car-state ?last-data-point))]
+            :let [result-ch (go (recorder/record-data recorder location ?last-car-state ?last-data-point))]
             :let [[val ch] (alts! [kill-ch result-ch])]
 
             :do (close! result-ch)
@@ -61,7 +67,7 @@
 
             (some? err) (errorf "[%s] Failed to record data; %s" prefix err)
 
-            :do (infof "[%s] Successfully recorded data")
+            :do (infof "[%s] Successfully recorded data" prefix)
 
             (recur recorder ?last-car-state ?last-data-point)))
 

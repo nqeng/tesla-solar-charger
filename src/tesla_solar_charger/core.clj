@@ -51,7 +51,7 @@
     (ntfy ntfy-channel-name message)))
 
 (def ntfy-appender
-  {:min-level :error
+  {:min-level :warn
    :enabled? true
    :async? true
    :fn timbre-ntfy
@@ -174,9 +174,9 @@
 
     (regulate-charge-rate home-regulator tesla-state-ch3 home-solar-data-ch2 charge-power-ch kill-ch (format "%s Regulator" home-name))
 
-    (record-data office-csv-recorder tesla-state-ch4 office-solar-data-ch3 kill-ch (format "%s Recorder" office-name))
+    (record-data office-csv-recorder office-location tesla-state-ch4 office-solar-data-ch3 kill-ch (format "%s Recorder" office-name))
 
-    (record-data home-csv-recorder tesla-state-ch5 home-solar-data-ch3 kill-ch (format "%s Recorder" home-name))
+    (record-data home-csv-recorder home-location tesla-state-ch5 home-solar-data-ch3 kill-ch (format "%s Recorder" home-name))
 
     (set-charge-rate charge-setter charge-power-ch kill-ch "Tessie Charge Setter")
 

@@ -21,7 +21,7 @@
 
 (defrecord ThingspeakRecorder [api-key]
   IRecorder
-  (record-data [recorder ?car-state ?data-point] 
+  (record-data [recorder location ?car-state ?data-point] 
     (try
       (record-data-thingspeak ?car-state ?data-point api-key)
       {:obj recorder :err nil}

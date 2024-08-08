@@ -16,20 +16,32 @@
     "Excess power is %.2fW as of %s"
     (:excess-power-watts data-point) (:timestamp data-point)))
 
+(defn time-after-seconds
+  [seconds]
+  (.plusSeconds (java.time.Instant/now) seconds))
+
+(defn sleep-until
+  [datetime]
+  (let [millis (.until (java.time.Instant/now) 
+                       datetime 
+                       java.time.temporal.ChronoUnit/MILLIS)]
+    (when (pos? millis)
+      (Thread/sleep millis))))
+
 (defn fetch-new-solar-data
   [data-source output-ch kill-ch prefix]
   (close!
     (go
       (infof "[%s] Process started" prefix)
       (loop [data-source data-source
-             sleep-for 0
+             next-poll-time (java.time.Instant/now)
              ?last-data-point nil]
 
         (better-cond
-          :let [timeout-ch (timeout (* 1000 sleep-for))]
-          :let [[val ch] (alts! [kill-ch timeout-ch])]
+          :let [sleep-ch (go (sleep-until next-poll-time))]
+          :let [[val ch] (alts! [kill-ch sleep-ch])]
 
-          :do (close! timeout-ch)
+          :do (close! sleep-ch)
 
           (= kill-ch ch) (infof "[%s] Received kill signal" prefix)
 
@@ -43,14 +55,16 @@
           :let [{err :err data-source :obj data-point :val} val]
 
           (some? err)
-          (do
+          (let [next-poll-time (time-after-seconds 30)]
             (errorf "[%s] Failed to fetch solar data; %s" prefix err)
-            (recur data-source 30 ?last-data-point))
+            (debugf "[%s] Sleeping until %s" prefix next-poll-time)
+            (recur data-source next-poll-time ?last-data-point))
 
           (not (is-data-point-newer? data-point ?last-data-point))
-          (do
-            (infof "[%s] No new solar data" prefix)
-            (recur data-source 30 ?last-data-point))
+          (let [next-poll-time (time-after-seconds 30)]
+            (debugf "[%s] No new solar data" prefix)
+            (debugf "[%s] Sleeping until %s" prefix next-poll-time)
+            (recur data-source next-poll-time ?last-data-point))
 
           :do (infof "[%s] %s" prefix (make-data-point-message data-point)) 
           :do (debugf "[%s] Putting value on channel..." prefix)
@@ -61,9 +75,10 @@
 
           (false? val) (errorf "[%s] Output channel was closed" prefix)
 
+          :let [next-poll-time (time-after-seconds 30)]
           :do (debugf "[%s] Put value on channel" prefix)
-
-          (recur data-source 30 data-point)))
+          :do (debugf "[%s] Sleeping until %s" prefix next-poll-time)
+          (recur data-source next-poll-time data-point)))
 
       (infof "[%s] Process ended" prefix))))
 
