@@ -42,8 +42,8 @@
   [channel-name message]
   (try
     (client/post (format "https://ntfy.sh/%s" channel-name) message)
-    (catch Exception e nil)
-    (catch clojure.lang.ExceptionInfo e nil)))
+    (catch Exception _)
+    (catch clojure.lang.ExceptionInfo _)))
 
 (def settings (duratom :local-file
                        :file-path settings-filepath
