@@ -100,7 +100,7 @@
       (make-regulation nil "Car left")
 
       (not (is-car-at-location? location new-car-state))
-      (make-regulation nil "Car is not at this location")
+      (make-regulation nil (format "%s is not here" car-name))
 
       (and (did-car-enter-location? location new-car-state last-car-state)
            (did-car-start-charging? new-car-state last-car-state)
@@ -152,7 +152,7 @@
       (make-regulation nil "No car state")
 
       (not (is-car-at-location? location last-car-state))
-      (make-regulation nil (format "%s is not at %s" car-name (:name location)))
+      (make-regulation nil (format "%s is not here" car-name))
 
       (not (:is-charging last-car-state))
       (make-regulation nil (format "%s is not charging" car-name))

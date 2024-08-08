@@ -5,13 +5,13 @@
    [clojure.core.async :as async]))
 
 (defn timer
-  [duration-ms]
-  (let [output (async/chan)]
+  [millis]
+  (let [output-ch (async/chan)]
     (async/go-loop []
-      (Thread/sleep duration-ms)
-      (async/>! output 0)
+      (Thread/sleep millis)
+      (async/>! output-ch true)
       (recur))
-    output))
+    output-ch))
 
 (defn print-values
   ([format-str input-ch]

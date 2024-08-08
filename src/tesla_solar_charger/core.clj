@@ -5,8 +5,10 @@
     [tesla-solar-charger.car-charge-setter.tessie-charge-setter :refer [new-TessieChargeSetter]]
     [tesla-solar-charger.gophers.process-sms-messages :refer [fetch-new-sms-messages]]
     [tesla-solar-charger.regulator.target-regulator :refer [new-TargetRegulator]]
+    [tesla-solar-charger.recorder.csv-recorder :refer [new-CSVRecorder]]
     [tesla-solar-charger.gophers.get-car-state :refer [fetch-new-car-state]]
     [tesla-solar-charger.gophers.set-charge-rate :refer [set-charge-rate]]
+    [tesla-solar-charger.gophers.record-data :refer [record-data]]
     [better-cond.core :refer [cond] :rename {cond better-cond}]
     [tesla-solar-charger.utils :as utils]
     [clj-http.client :as client]
@@ -20,6 +22,13 @@
     [tesla-solar-charger.solar-data-source.gosungrow-data-source :refer [new-GoSungrowDataSource]]
     [tesla-solar-charger.gophers.get-solar-data :refer [fetch-new-solar-data]]
     [clojure.core.async :as async :refer [close! chan sliding-buffer]]))
+
+(defn getenv
+  [key]
+  (let [value (System/getenv key)]
+    (when (nil? value)
+      (timbre/errorf "[Main] Enviromnent variable %s is not defined" key))
+    value))
 
 (def log-filename "logs.log")
 
@@ -55,13 +64,6 @@
   (clojure.java.io/delete-file log-filename)
   (catch java.io.IOException _))
 
-(defn getenv
-  [key]
-  (let [value (System/getenv key)]
-    (when (nil? value)
-      (throw (ex-info (format "Enviromnent variable %s is not defined" key) {})))
-    value))
-
 (def settings-filepath (.getAbsolutePath (clojure.java.io/file (getenv "SETTINGS_FILEPATH"))))
 
 (def settings (duratom :local-file
@@ -73,54 +75,108 @@
   (timbre/warn "[Main] Starting...")
   (let [kill-ch (chan)
         shutdown-hook (fn [] (timbre/warn "[Main] Sending kill signal...") (close! kill-ch))
+
+        tesla-name (getenv "CAR_NAME")
         tesla-vin (getenv "TESLA_VIN")
         tessie-auth-token (getenv "TESSIE_AUTH_TOKEN")
-        script-filepath (getenv "GOSUNGROW_SCRIPT_FILEPATH")
+        locationiq-auth-token (getenv "LOCATIONIQ_AUTH_TOKEN")
+        car-data-source (new-TessieDataSource tesla-vin tessie-auth-token locationiq-auth-token)
+        charge-setter (new-TessieChargeSetter tessie-auth-token tesla-vin)
+
+        office-csv-filepath (getenv "CSV_FILEPATH")
+        office-csv-recorder (new-CSVRecorder office-csv-filepath)
+
+        home-csv-filepath (getenv "CSV_FILEPATH2")
+        home-csv-recorder (new-CSVRecorder home-csv-filepath)
+
+        gosungrow-filepath (getenv "GOSUNGROW_SCRIPT_FILEPATH")
         gosungrow-appkey (getenv "GOSUNGROW_APPKEY")
         sungrow-username (getenv "SUNGROW_USERNAME")
         sungrow-password (getenv "SUNGROW_PASSWORD")
-        ps-key (getenv "GOSUNGROW_PS_KEY")
-        ps-id (getenv "GOSUNGROW_PS_ID")
-        excess-power-key (getenv "GOSUNGROW_EXCESS_POWER_KEY")
-        location-latitude (parse-double (getenv "LOCATION_LATITUDE"))
-        location-longitude (parse-double (getenv "LOCATION_LONGITUDE"))
-        ps-key2 (getenv "GOSUNGROW_PS_KEY2")
-        ps-id2 (getenv "GOSUNGROW_PS_ID2")
-        excess-power-key2 (getenv "GOSUNGROW_EXCESS_POWER_KEY2")
-        location-latitude2 (parse-double (getenv "LOCATION_LATITUDE2"))
-        location-longitude2 (parse-double (getenv "LOCATION_LONGITUDE2"))
-        locationiq-auth-token (getenv "LOCATIONIQ_AUTH_TOKEN")
-        car-name (getenv "CAR_NAME")
-        car-data-source (new-TessieDataSource tesla-vin tessie-auth-token locationiq-auth-token)
-        solar-data-source (new-GoSungrowDataSource script-filepath gosungrow-appkey sungrow-username sungrow-password ps-key ps-id excess-power-key)
-        solar-data-source2 (new-GoSungrowDataSource script-filepath gosungrow-appkey sungrow-username sungrow-password ps-key2 ps-id2 excess-power-key2)
-        charge-setter (new-TessieChargeSetter tessie-auth-token tesla-vin)
-        location-name (getenv "LOCATION_NAME")
-        location {:latitude location-latitude :longitude location-longitude :name location-name}
-        location-name2 (getenv "LOCATION_NAME2")
-        location2 {:latitude location-latitude2 :longitude location-longitude2 :name location-name2}
-        regulator (new-TargetRegulator car-name location #(deref settings))
-        regulator2 (new-TargetRegulator car-name location2 #(deref settings))
-        car-state-ch (chan)
-        car-state-ch2 (chan)
-        car-state-ch3 (chan)
-        solar-data-ch (chan)
-        solar-data-ch2 (chan)
+
+        office-ps-key (getenv "GOSUNGROW_PS_KEY")
+        office-ps-id (getenv "GOSUNGROW_PS_ID")
+        office-excess-power-key (getenv "GOSUNGROW_EXCESS_POWER_KEY")
+        office-solar-data-source (new-GoSungrowDataSource 
+                                   gosungrow-filepath 
+                                   gosungrow-appkey 
+                                   sungrow-username 
+                                   sungrow-password 
+                                   office-ps-key 
+                                   office-ps-id 
+                                   office-excess-power-key)
+
+        home-ps-key (getenv "GOSUNGROW_PS_KEY2")
+        home-ps-id (getenv "GOSUNGROW_PS_ID2")
+        home-excess-power-key (getenv "GOSUNGROW_EXCESS_POWER_KEY2")
+        home-solar-data-source (new-GoSungrowDataSource 
+                                 gosungrow-filepath 
+                                 gosungrow-appkey 
+                                 sungrow-username 
+                                 sungrow-password 
+                                 home-ps-key 
+                                 home-ps-id 
+                                 home-excess-power-key)
+
+        office-name (getenv "LOCATION_NAME")
+        office-latitude (parse-double (getenv "LOCATION_LATITUDE"))
+        office-longitude (parse-double (getenv "LOCATION_LONGITUDE"))
+        office-location {:latitude office-latitude 
+                         :longitude office-longitude 
+                         :name office-name}
+
+        home-name (getenv "LOCATION_NAME2")
+        home-latitude (parse-double (getenv "LOCATION_LATITUDE2"))
+        home-longitude (parse-double (getenv "LOCATION_LONGITUDE2"))
+        home-location {:latitude home-latitude 
+                       :longitude home-longitude 
+                       :name home-name}
+
+        office-regulator (new-TargetRegulator 
+                           tesla-name 
+                           office-location 
+                           #(deref settings))
+
+        home-regulator (new-TargetRegulator 
+                         tesla-name 
+                         home-location 
+                         #(deref settings))
+
+        tesla-state-ch (chan)
+        tesla-state-ch2 (chan)
+        tesla-state-ch3 (chan)
+        tesla-state-ch4 (chan)
+        tesla-state-ch5 (chan)
+
+        office-solar-data-ch (chan)
+        office-solar-data-ch2 (chan)
+        office-solar-data-ch3 (chan)
+
+        home-solar-data-ch (chan)
+        home-solar-data-ch2 (chan)
+        home-solar-data-ch3 (chan)
+
         charge-power-ch (chan (sliding-buffer 1))]
 
     (.addShutdownHook (Runtime/getRuntime) (Thread. shutdown-hook))
 
-    (split-ch car-state-ch car-state-ch2 car-state-ch3)
+    (split-ch tesla-state-ch tesla-state-ch2 tesla-state-ch3 tesla-state-ch4 tesla-state-ch5)
+    (split-ch home-solar-data-ch home-solar-data-ch2 home-solar-data-ch3)
+    (split-ch office-solar-data-ch office-solar-data-ch2 office-solar-data-ch3)
 
-    (fetch-new-car-state car-data-source car-state-ch kill-ch "Tessie Data Source")
+    (fetch-new-car-state car-data-source tesla-state-ch kill-ch "Tessie Data Source")
 
-    (fetch-new-solar-data solar-data-source solar-data-ch kill-ch (format "%s Data Source" location-name))
+    (fetch-new-solar-data office-solar-data-source office-solar-data-ch kill-ch (format "%s Data Source" office-name))
 
-    (fetch-new-solar-data solar-data-source2 solar-data-ch2 kill-ch (format "%s Data Source" location-name2))
+    (fetch-new-solar-data home-solar-data-source home-solar-data-ch kill-ch (format "%s Data Source" home-name))
 
-    (regulate-charge-rate regulator car-state-ch2 solar-data-ch charge-power-ch kill-ch (format "%s Regulator" location-name))
+    (regulate-charge-rate office-regulator tesla-state-ch2 office-solar-data-ch2 charge-power-ch kill-ch (format "%s Regulator" office-name))
 
-    (regulate-charge-rate regulator2 car-state-ch3 solar-data-ch2 charge-power-ch kill-ch (format "%s Regulator" location-name2))
+    (regulate-charge-rate home-regulator tesla-state-ch3 home-solar-data-ch2 charge-power-ch kill-ch (format "%s Regulator" home-name))
+
+    (record-data office-csv-recorder tesla-state-ch4 office-solar-data-ch3 kill-ch (format "%s Recorder" office-name))
+
+    (record-data home-csv-recorder tesla-state-ch5 home-solar-data-ch3 kill-ch (format "%s Recorder" home-name))
 
     (set-charge-rate charge-setter charge-power-ch kill-ch "Tessie Charge Setter")
 

@@ -1,5 +1,6 @@
 pom.xml
 *.log
+*.csv
 pom.xml.asc
 *.edn
 *.jar

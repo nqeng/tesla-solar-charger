@@ -7,56 +7,67 @@
 
 (defn regulate-charge-rate
   [regulator car-state-ch data-point-ch charge-power-ch kill-ch prefix]
-  (go
-    (infof "[%s] Process started" prefix)
-    (loop [regulator regulator]
-
-      (better-cond
-        :let [[val ch] (alts! [kill-ch car-state-ch data-point-ch])]
-
-        (= ch kill-ch) (infof "[%s] Process dying..." prefix)
-
-        (nil? val) (errorf "[%s] Input channel was closed" prefix)
-
-        (= ch data-point-ch)
-        (better-cond
-          :let [data-point val]
-          :let [[regulator regulation] (make-regulation-from-new-data-point regulator data-point)]
-          :let [message (:message regulation)]
-          :let [?new-charge-power-watts (:new-charge-power-watts regulation)]
-
-          :do (infof "[%s] Regulated new solar data; %s" prefix message)
-
-          (nil? ?new-charge-power-watts) (recur regulator)
-
-          :do (debugf "[%s] Putting value on channel..." prefix)
-
-          :let [success (>! charge-power-ch ?new-charge-power-watts)]
-
-          (false? success) (errorf "[%s] Output channel was closed" prefix)
-
-          :do (debugf "[%s] Put value on channel" prefix)
-
-          (recur regulator))
+  (close!
+    (go
+      (infof "[%s] Process started" prefix)
+      (loop [regulator regulator]
 
         (better-cond
-          :let [car-state val]
-          :let [[regulator regulation] (make-regulation-from-new-car-state regulator car-state)]
-          :let [message (:message regulation)]
-          :let [?new-charge-power-watts (:new-charge-power-watts regulation)]
+          :do (debugf "[%s] Waiting for value..." prefix)
 
-          :do (infof "[%s] Regulated new car state; %s" prefix message)
+          :let [[val ch] (alts! [kill-ch car-state-ch data-point-ch])]
 
-          (nil? ?new-charge-power-watts) (recur regulator)
+          :do (debugf "[%s] Took value off channel" prefix)
 
-          :do (debugf "[%s] Putting value on channel..." prefix)
+          (= kill-ch ch) (infof "[%s] Received kill signal" prefix)
 
-          :let [success (>! charge-power-ch ?new-charge-power-watts)]
+          (nil? val) (errorf "[%s] Input channel was closed" prefix)
 
-          (false? success) (errorf "[%s] Output channel was closed" prefix)
+          (= ch data-point-ch)
+          (better-cond
+            :let [data-point val]
+            :let [[regulator regulation] (make-regulation-from-new-data-point regulator data-point)]
+            :let [message (:message regulation)]
+            :let [?new-charge-power-watts (:?new-charge-power-watts regulation)]
 
-          :do (debugf "[%s] Put value on channel" prefix)
+            :do (infof "[%s] Regulated new solar data; %s" prefix message)
 
-          (recur regulator))))
+            (nil? ?new-charge-power-watts) (recur regulator)
 
-    (infof "[%s] Process ended" prefix)))
+            :do (debugf "[%s] Putting value on channel..." prefix)
+
+            :let [[val ch] (alts! [[charge-power-ch ?new-charge-power-watts] kill-ch])]
+
+            (= kill-ch ch) (infof "[%s] Received kill signal" prefix)
+
+            (false? val) (errorf "[%s] Output channel was closed" prefix)
+
+            :do (debugf "[%s] Put value on channel" prefix)
+
+            (recur regulator))
+
+          :else
+          (better-cond
+            :let [car-state val]
+            :let [[regulator regulation] (make-regulation-from-new-car-state regulator car-state)]
+            :let [message (:message regulation)]
+            :let [?new-charge-power-watts (:?new-charge-power-watts regulation)]
+
+            :do (infof "[%s] Regulated new car state; %s" prefix message)
+
+            (nil? ?new-charge-power-watts) (recur regulator)
+
+            :do (debugf "[%s] Putting value on channel..." prefix)
+
+            :let [[val ch] (alts! [[charge-power-ch ?new-charge-power-watts] kill-ch])]
+
+            (= kill-ch ch) (infof "[%s] Received kill signal" prefix)
+
+            (false? val) (errorf "[%s] Output channel was closed" prefix)
+
+            :do (debugf "[%s] Put value on channel" prefix)
+
+            (recur regulator))))
+
+      (infof "[%s] Process ended" prefix))))
+

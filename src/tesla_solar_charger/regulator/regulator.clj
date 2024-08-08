@@ -5,6 +5,6 @@
   (make-regulation-from-new-data-point [regulator new-data-point]))
 
 (defn make-regulation
-  [new-charge-power-watts message]
-  {:new-charge-power-watts new-charge-power-watts
+  [?new-charge-power-watts message]
+  {:?new-charge-power-watts ?new-charge-power-watts
    :message message})

@@ -3,7 +3,7 @@
     [taoensso.timbre :as timbre :refer [infof debugf errorf]]
     [better-cond.core :refer [cond] :rename {cond better-cond}]
     [tesla-solar-charger.solar-data-source.solar-data-source :refer [get-latest-data-point]]
-    [clojure.core.async :refer [>! alts! timeout chan go close!]]))
+    [clojure.core.async :refer [>! <! alts! timeout chan go close!]]))
 
 (defn is-data-point-newer?
   [data-point ?last-data-point]
@@ -18,45 +18,52 @@
 
 (defn fetch-new-solar-data
   [data-source output-ch kill-ch prefix]
-  (go
-    (infof "[%s] Process started" prefix)
-    (loop [data-source data-source
-           sleep-for 0
-           ?last-data-point nil]
+  (close!
+    (go
+      (infof "[%s] Process started" prefix)
+      (loop [data-source data-source
+             sleep-for 0
+             ?last-data-point nil]
 
-      (better-cond
-        :let [timeout-ch (timeout (* 1000 sleep-for))]
-        :let [[val ch] (alts! [kill-ch timeout-ch])]
+        (better-cond
+          :let [timeout-ch (timeout (* 1000 sleep-for))]
+          :let [[val ch] (alts! [kill-ch timeout-ch])]
 
-        (= ch kill-ch) (infof "[%s] Received kill signal" prefix)
+          :do (close! timeout-ch)
 
-        :let [result-ch (go (get-latest-data-point data-source))]
-        :let [[val ch] (alts! [kill-ch result-ch])]
+          (= kill-ch ch) (infof "[%s] Received kill signal" prefix)
 
-        (= ch kill-ch) (infof "[%s] Received kill signal" prefix)
+          :let [result-ch (go (get-latest-data-point data-source))]
+          :let [[val ch] (alts! [kill-ch result-ch])]
 
-        :let [{err :err data-source :obj data-point :val} val]
+          :do (close! result-ch)
 
-        (some? err)
-        (do
-          (errorf "[%s] Failed to fetch solar data; %s" prefix err)
-          (recur data-source 30 ?last-data-point))
+          (= kill-ch ch) (infof "[%s] Received kill signal" prefix)
 
-        (not (is-data-point-newer? data-point ?last-data-point))
-        (do
-          (infof "[%s] No new solar data" prefix)
-          (recur data-source 30 ?last-data-point))
+          :let [{err :err data-source :obj data-point :val} val]
 
-        :do (infof "[%s] %s" prefix (make-data-point-message data-point)) 
-        :do (debugf "[%s] Putting value on channel..." prefix)
+          (some? err)
+          (do
+            (errorf "[%s] Failed to fetch solar data; %s" prefix err)
+            (recur data-source 30 ?last-data-point))
 
-        :let [success (>! output-ch data-point)]
+          (not (is-data-point-newer? data-point ?last-data-point))
+          (do
+            (infof "[%s] No new solar data" prefix)
+            (recur data-source 30 ?last-data-point))
 
-        (false? success) (errorf "[%s] Output channel was closed" prefix)
+          :do (infof "[%s] %s" prefix (make-data-point-message data-point)) 
+          :do (debugf "[%s] Putting value on channel..." prefix)
 
-        :do (debugf "[%s] Put value on channel" prefix)
+          :let [[val ch] (alts! [[output-ch data-point] kill-ch])]
 
-        (recur data-source 30 data-point)))
+          (= kill-ch ch) (infof "[%s] Received kill signal" prefix)
 
-    (infof "[%s] Process ended" prefix)))
+          (false? val) (errorf "[%s] Output channel was closed" prefix)
+
+          :do (debugf "[%s] Put value on channel" prefix)
+
+          (recur data-source 30 data-point)))
+
+      (infof "[%s] Process ended" prefix))))
 

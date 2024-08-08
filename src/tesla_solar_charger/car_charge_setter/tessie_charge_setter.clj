@@ -16,7 +16,7 @@
 
 (defn set-charge-current-tessie
   [tessie-auth-token vehicle-vin charge-current-amps]
-  (let [url (str "https://api.tessie.com/" vehicle-vin "/command/set_charging_amps")
+  (let [url (format "https://api.tessie.com/%s/command/set_charging_amps" vehicle-vin)
         query-params {:retry-duration "40"
                       :wait-for-completion "true"
                       :amps (str (int charge-current-amps))}
@@ -30,16 +30,19 @@
   (let [charge-current-amps (watts-to-amps-three-phase-australia charge-power-watts)]
     (set-charge-current-tessie tessie-auth-token vehicle-vin charge-current-amps)))
 
-(defrecord TessieChargeSetter []
+(defrecord TessieChargeSetter 
+  [tessie-auth-token vehicle-vin]
   ICarChargeSetter
-  (set-charge-power [data-source charge-power-watts]
-    (let [vehicle-vin (:vehicle-vin data-source)
-          tessie-auth-token (:tessie-auth-token data-source)]
-      (set-charge-power-tessie tessie-auth-token vehicle-vin charge-power-watts))))
+  (set-charge-power [charge-setter charge-power-watts]
+    (try
+        (set-charge-power-tessie tessie-auth-token vehicle-vin charge-power-watts)
+        {:obj charge-setter :err nil}
+        (catch clojure.lang.ExceptionInfo err
+          {:obj charge-setter :err err})
+        (catch Exception err
+          {:obj charge-setter :err err}))))
 
 (defn new-TessieChargeSetter
   [tessie-auth-token vehicle-vin]
-  (let [the-map {:vehicle-vin vehicle-vin
-                 :tessie-auth-token tessie-auth-token}
-        defaults {}]
-    (map->TessieChargeSetter (merge defaults the-map))))
+  (->TessieChargeSetter tessie-auth-token vehicle-vin))
+

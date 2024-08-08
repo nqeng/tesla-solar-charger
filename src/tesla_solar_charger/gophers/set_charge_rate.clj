@@ -3,49 +3,41 @@
     [taoensso.timbre :as timbre :refer [infof errorf debugf]]
     [better-cond.core :refer [cond] :rename {cond better-cond}]
     [tesla-solar-charger.car-charge-setter.car-charge-setter :refer [set-charge-power]]
-    [clojure.core.async :refer [>! go alts!]]))
-
-(defn perform-and-return-error
-  [foo]
-  (try
-    (let [result (foo)]
-      {:err nil :val result})
-    (catch clojure.lang.ExceptionInfo err
-      {:err err :val nil})
-    (catch Exception err
-      {:err err :val nil})))
+    [clojure.core.async :refer [>! go alts! close!]]))
 
 (defn set-charge-rate
   [charge-setter input-ch kill-ch prefix]
-  (go
-    (infof "[%s] Process started" prefix )
-    (loop []
+  (close!
+    (go
+      (infof "[%s] Process started" prefix )
+      (loop [charge-setter charge-setter]
 
-      (better-cond
-        :do (debugf "[%s] Taking value off channel..." prefix)
+        (better-cond
+          :do (debugf "[%s] Waiting for value..." prefix)
 
-        :let [[val ch] (alts! [kill-ch input-ch])]
-        (= ch kill-ch) (infof "[%s] Received kill signal" prefix)
+          :let [[val ch] (alts! [kill-ch input-ch])]
 
-        (nil? val) (errorf "[%s] Input channel was closed" prefix)
+          :do (debugf "[%s] Took value off channel" prefix)
 
-        :let [power-watts val]
+          (= kill-ch ch) (infof "[%s] Received kill signal" prefix)
 
-        :do (infof "[%s] Setting charge rate to %.2fW..." prefix (float power-watts))
+          (nil? val) (errorf "[%s] Input channel was closed" prefix)
 
-        :let [work #(set-charge-power charge-setter power-watts)]
-        :let [result-ch (go (perform-return-error work))]
-        :let [[val ch] (alts! [kill-ch result-ch])]
+          :let [power-watts val]
 
-        (= ch kill-ch) (infof "[%s] Received kill signal" prefix)
+          :do (infof "[%s] Setting charge rate to %.2fW..." prefix (float power-watts))
 
-        :let [{err :err} val]
+          :let [result-ch (go (set-charge-power charge-setter power-watts))]
+          :let [[val ch] (alts! [kill-ch result-ch])]
 
-        (some? err)
-        (errorf "[%s] Failed to set charge rate; %s" prefix err)
+          (= ch kill-ch) (do (infof "[%s] Received kill signal" prefix) (close! result-ch))
 
-        :do (infof "[%s] Successfully set charge rate" prefix)
+          :let [{charge-setter :obj err :err} val]
 
-        (recur)))
+          (some? err) (errorf "[%s] Failed to set charge rate; %s" prefix err)
 
-    (infof "Process ended" prefix)))
+          :do (infof "[%s] Successfully set charge rate" prefix)
+
+          (recur charge-setter)))
+
+      (infof "[%s] Process ended" prefix))))

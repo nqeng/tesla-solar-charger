@@ -3,7 +3,7 @@
     [taoensso.timbre :as timbre :refer [infof errorf debugf]]
     [better-cond.core :refer [cond] :rename {cond better-cond}]
     [tesla-solar-charger.car-data-source.car-data-source :refer [get-latest-car-state]]
-    [clojure.core.async :refer [>! close! timeout alts! chan go]]))
+    [clojure.core.async :refer [>! close! timeout alts! chan <! go]]))
 
 (defn is-car-state-newer?
   [car-state ?last-car-state]
@@ -21,45 +21,52 @@
 
 (defn fetch-new-car-state
   [data-source output-ch kill-ch prefix]
-  (go
-    (infof "[%s] Process started" prefix)
-    (loop [data-source data-source
-           sleep-for 0
-           ?last-car-state nil]
+  (close!
+    (go
+      (infof "[%s] Process started" prefix)
+      (loop [data-source data-source
+             sleep-for 0
+             ?last-car-state nil]
 
-      (better-cond
-        :let [timeout-ch (timeout (* 1000 sleep-for))]
-        :let [[val ch] (alts! [kill-ch timeout-ch])]
+        (better-cond
+          :let [timeout-ch (timeout (* 1000 sleep-for))]
+          :let [[val ch] (alts! [kill-ch timeout-ch])]
 
-        (= ch kill-ch) (infof "[%s] Received kill signal" prefix)
+          :do (close! timeout-ch)
 
-        :let [result-ch (go (get-latest-car-state data-source))]
-        :let [[val ch] (alts! [kill-ch result-ch])]
+          (= kill-ch ch) (infof "[%s] Received kill signal" prefix)
 
-        (= ch kill-ch) (infof "[%s] Received kill signal" prefix)
+          :let [result-ch (go (get-latest-car-state data-source))]
+          :let [[val ch] (alts! [kill-ch result-ch])]
 
-        :let [{err :err car-state :val data-source :obj} val]
+          :do (close! result-ch)
 
-        (some? err)
-        (do
-          (errorf "[%s] Failed to fetch car state; %s" prefix err)
-          (recur data-source 30 ?last-car-state))
+          (= kill-ch ch) (infof "[%s] Received kill signal" prefix)
 
-        (not (is-car-state-newer? car-state ?last-car-state))
-        (do
-          (infof "[%s] No new car state; sleeping for 30s" prefix)
-          (recur data-source 30 ?last-car-state))
+          :let [{err :err car-state :val data-source :obj} val]
 
-        :do (infof "[%s] %s" prefix (make-car-state-message car-state))
-        :do (debugf "[%s] Putting value on channel..." prefix)
+          (some? err)
+          (do
+            (errorf "[%s] Failed to fetch car state; %s" prefix err)
+            (recur data-source 30 ?last-car-state))
 
-        :let [success (>! output-ch car-state)]
+          (not (is-car-state-newer? car-state ?last-car-state))
+          (do
+            (infof "[%s] No new car state; sleeping for 30s" prefix)
+            (recur data-source 30 ?last-car-state))
 
-        (false? success) (errorf "[%s] Output channel was closed" prefix)
+          :do (infof "[%s] %s" prefix (make-car-state-message car-state))
+          :do (debugf "[%s] Putting value on channel..." prefix)
 
-        :do (debugf "[%s] Put value on channel" prefix)
+          :let [[val ch] (alts! [[output-ch car-state] kill-ch])]
 
-        (recur data-source 30 car-state)))
+          (= kill-ch ch) (infof "[%s] Received kill signal" prefix)
 
-    (infof "[%s] Process ended" prefix)))
+          (false? val) (errorf "[%s] Output channel was closed" prefix)
+
+          :do (debugf "[%s] Put value on channel" prefix)
+
+          (recur data-source 30 car-state)))
+
+      (infof "[%s] Process ended" prefix))))
 
