@@ -38,7 +38,7 @@
 
 (def settings-filepath (.getAbsolutePath (clojure.java.io/file (getenv "SETTINGS_FILEPATH"))))
 
-(defn send-to-ntfy
+(defn ntfy
   [channel-name message]
   (try
     (client/post (format "https://ntfy.sh/%s" channel-name) message)
