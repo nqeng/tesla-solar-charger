@@ -88,7 +88,8 @@
         home-csv-filepath (getenv "CSV_FILEPATH2")
         home-csv-recorder (new-CSVRecorder home-csv-filepath)
 
-        gosungrow-filepath (getenv "GOSUNGROW_SCRIPT_FILEPATH")
+        gosungrow-filepath-office (getenv "GOSUNGROW_FILEPATH_OFFICE")
+        gosungrow-filepath-home (getenv "GOSUNGROW_FILEPATH_HOME")
         gosungrow-appkey (getenv "GOSUNGROW_APPKEY")
         sungrow-username (getenv "SUNGROW_USERNAME")
         sungrow-password (getenv "SUNGROW_PASSWORD")
@@ -97,7 +98,7 @@
         office-ps-id (getenv "GOSUNGROW_PS_ID")
         office-excess-power-key (getenv "GOSUNGROW_EXCESS_POWER_KEY")
         office-solar-data-source (new-GoSungrowDataSource 
-                                   gosungrow-filepath 
+                                   gosungrow-filepath-office
                                    gosungrow-appkey 
                                    sungrow-username 
                                    sungrow-password 
@@ -109,7 +110,7 @@
         home-ps-id (getenv "GOSUNGROW_PS_ID2")
         home-excess-power-key (getenv "GOSUNGROW_EXCESS_POWER_KEY2")
         home-solar-data-source (new-GoSungrowDataSource 
-                                 gosungrow-filepath 
+                                 gosungrow-filepath-home
                                  gosungrow-appkey 
                                  sungrow-username 
                                  sungrow-password 
