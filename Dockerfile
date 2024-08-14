@@ -1,4 +1,4 @@
-FROM clojure
+FROM eclipse-temurin:8-jdk-jammy
 
 RUN mkdir -p /tesla-solar-charger
 

@@ -40,13 +40,15 @@
 
 (defn execute-config-shell-command
   [gosungrow-filepath appkey username password]
-  (sh 
+  (let [config-filepath (format "%s.config.json" gosungrow-filepath)]
+    (sh 
     gosungrow-filepath
+    (format "--config=%s" config-filepath)
     "config" 
     "write" 
     (format "--appkey=%s" appkey) 
     (format "--user=%s" username) 
-    (format "--password=%s" password)))
+    (format "--password=%s" password))))
 
 (defn configure-gosungrow-executable
   [gosungrow-filepath appkey username password]
@@ -61,8 +63,10 @@
 
 (defn execute-data-shell-command
   [gosungrow-filepath ps-id ps-key ps-point data-interval-minutes start-timestamp-string end-timestamp-string]
+  (let [config-filepath (format "%s.config.json" gosungrow-filepath)]
   (sh
     gosungrow-filepath
+    (format "--config=%s" config-filepath)
     "data"
     "json"
     "AppService.queryMutiPointDataList" 
@@ -71,7 +75,7 @@
     (format "MinuteInterval:%s" (str data-interval-minutes)) 
     (format "Points:%s" ps-point) 
     (format "PsId:%s" ps-id) 
-    (format "PsKeys:%s" ps-key)))
+    (format "PsKeys:%s" ps-key))))
 
 (defn get-gosungrow-json-data
   [gosungrow-filepath ps-id ps-key ps-point data-interval-minutes start-timestamp-string end-timestamp-string]

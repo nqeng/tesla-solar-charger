@@ -54,7 +54,7 @@
               (debugf "[%s] Received new data point" prefix)
               (recur recorder ?last-car-state val))
 
-            :do (infof "[%s] Recording data..." prefix)
+            :do (debug "[%s] Recording data..." prefix)
 
             :let [result-ch (go (recorder/record-data recorder location ?last-car-state ?last-data-point))]
             :let [[val ch] (alts! [kill-ch result-ch])]
