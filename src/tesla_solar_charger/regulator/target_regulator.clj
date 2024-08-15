@@ -1,9 +1,9 @@
 (ns tesla-solar-charger.regulator.target-regulator
   (:require
-    [clojure.core.async :refer [offer!]]
     [taoensso.timbre :as timbre :refer [infof errorf debugf]]
-   [tesla-solar-charger.haversine :refer [distance-between-geo-points-meters]]
-   [tesla-solar-charger.regulator.regulator :refer [IRegulator]]))
+    [tesla-solar-charger.car-charge-setter.car-charge-setter :refer [set-charge-power]]
+    [tesla-solar-charger.haversine :refer [distance-between-geo-points-meters]]
+    [tesla-solar-charger.regulator.regulator :refer [IRegulator]]))
 
 (defn clamp-min-max
   [num min max]
@@ -16,10 +16,10 @@
   [location car-state]
   (let [range-meters 50
         distance-between-meters (distance-between-geo-points-meters
-                                 (:latitude car-state)
-                                 (:longitude car-state)
-                                 (:latitude location)
-                                 (:longitude location))]
+                                  (:latitude car-state)
+                                  (:longitude car-state)
+                                  (:latitude location)
+                                  (:longitude location))]
     (< distance-between-meters range-meters)))
 
 (defn calc-new-charge-power-watts
@@ -97,7 +97,7 @@
     target-time))
 
 (defn regulate-new-data-point
-  [car-name location options last-car-state last-data-point new-data-point charge-power-ch prefix]
+  [car-name location options last-car-state last-data-point new-data-point charge-setter prefix]
   (let [{:keys [target-percent 
                 target-hour
                 target-minute
@@ -134,13 +134,13 @@
                                      max-climp-watts
                                      max-drop-watts)]
         (infof "[%s] Excess power is %.2fW; Car should charge at %.2fW" 
-                   prefix
-                   excess-power-watts 
-                   new-charge-power-watts)
-        (offer! charge-power-ch new-charge-power-watts)))))
+               prefix
+               excess-power-watts 
+               new-charge-power-watts)
+        (set-charge-power charge-setter new-charge-power-watts)))))
 
 (defn regulate-new-car-state
-  [car-name location options last-car-state new-car-state last-data-point charge-power-ch prefix]
+  [car-name location options last-car-state new-car-state last-data-point charge-setter prefix]
   (let [{:keys [target-percent 
                 target-hour
                 target-minute]} options
@@ -166,13 +166,13 @@
            is-override-active)
       (do
         (infof "[%s] Car entered and started charging with override" prefix)
-        (offer! charge-power-ch (:max-charge-power-watts new-car-state)))
+        (set-charge-power charge-setter max-charge-power-watts))
 
       (and (did-car-enter-location? location new-car-state last-car-state)
            (did-car-start-charging? new-car-state last-car-state))
       (do
         (infof "[%s] Car entered and started charging" prefix)
-        (offer! charge-power-ch 0))
+        (set-charge-power charge-setter 0))
 
       (did-car-enter-location? location new-car-state last-car-state)
       (infof "[%s] Car entered" prefix)
@@ -187,34 +187,34 @@
            is-override-active)
       (do
         (infof "[%s] Car started charging with override" prefix)
-        (offer! charge-power-ch max-charge-power-watts))
+        (set-charge-power charge-setter max-charge-power-watts))
 
       (and (did-car-start-charging? new-car-state last-car-state))
       (do
         (infof "[%s] Car started charging" prefix)
-        (offer! charge-power-ch 0))
+        (set-charge-power charge-setter 0))
 
       (did-override-turn-on? new-car-state last-car-state)
       (do
         (infof "[%s] Override turned on" prefix)
-        (offer! charge-power-ch max-charge-power-watts))
+        (set-charge-power charge-setter max-charge-power-watts))
 
       (did-override-turn-off? new-car-state last-car-state)
       (do
         (infof "[%s] Override turned off" prefix)
-        (offer! charge-power-ch 0))
+        (set-charge-power charge-setter 0))
 
       (and (not (should-override-to-reach-target? last-car-state target-percent target-time))
            (should-override-to-reach-target? new-car-state target-percent target-time))
       (do
         (infof "[%s] Overriding to reach %d%% by %s" prefix target-percent target-time)
-        (offer! charge-power-ch max-charge-power-watts))
+        (set-charge-power charge-setter max-charge-power-watts))
 
       (and (should-override-to-reach-target? last-car-state target-percent target-time)
            (not (should-override-to-reach-target? new-car-state target-percent target-time)))
       (do
         (infof "[%s] Turning off automatic override" prefix)
-        (offer! charge-power-ch max-charge-power-watts))
+        (set-charge-power charge-setter max-charge-power-watts))
 
       :else
       (debugf "[%s] No action"))))
@@ -227,36 +227,36 @@
    :max-climb-watts 500
    :max-drop-watts 500})
 
-(defrecord TargetRegulator [car-name location get-settings-fn last-car-state last-data-point charge-power-ch prefix]
+(defrecord TargetRegulator [car-name location last-car-state last-data-point prefix]
   IRegulator
-  (regulate-new-car-state [regulator new-car-state]
-    (let [settings (merge (get-settings-fn) default-settings)
+  (regulate-new-car-state [regulator new-car-state charge-setter options]
+    (let [settings (merge options default-settings)
           _ (regulate-new-car-state
-                       car-name
-                      location
-                      settings
-                      last-car-state
-                      new-car-state 
-                      last-data-point 
-                      charge-power-ch 
-                      prefix)
+              car-name
+              location
+              settings
+              last-car-state
+              new-car-state 
+              last-data-point 
+              charge-setter
+              prefix)
           regulator (assoc regulator :last-car-state new-car-state)]
       regulator))
-  (regulate-new-data-point [regulator new-data-point]
-    (let [settings (merge (get-settings-fn) default-settings)
+  (regulate-new-data-point [regulator new-data-point charge-setter options]
+    (let [settings (merge options default-settings)
           _ (regulate-new-data-point
-                       car-name
-                      location
-                      settings
-                      last-car-state
-                      last-data-point
-                      new-data-point
-                      charge-power-ch
-                      prefix)
+              car-name
+              location
+              settings
+              last-car-state
+              last-data-point
+              new-data-point
+              charge-setter
+              prefix)
           regulator (assoc regulator :last-data-point new-data-point)]
       regulator)))
 
 (defn new-TargetRegulator
-  [car-name location get-settings-fn charge-power-ch prefix]
-  (->TargetRegulator car-name location get-settings-fn nil nil charge-power-ch prefix))
+  [car-name location prefix]
+  (->TargetRegulator car-name location nil nil prefix))
 

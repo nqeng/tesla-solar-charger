@@ -150,15 +150,11 @@
         office-regulator (new-TargetRegulator 
                            tesla-name 
                            office-location 
-                           #(deref settings)
-                           charge-power-ch
                            (format "%s Regulator" office-name))
 
         home-regulator (new-TargetRegulator 
                          tesla-name 
                          home-location 
-                         #(deref settings)
-                         charge-power-ch
                          (format "%s Regulator" home-name))]
 
     (.addShutdownHook (Runtime/getRuntime) (Thread. shutdown-hook))
@@ -173,9 +169,9 @@
 
     (fetch-new-solar-data home-solar-data-source home-solar-data-ch kill-ch (format "%s Data Source" home-name))
 
-    (regulate-charge-rate office-regulator tesla-state-ch2 office-solar-data-ch2 charge-power-ch kill-ch (format "%s Regulator" office-name))
+    (regulate-charge-rate office-regulator tesla-state-ch2 office-solar-data-ch2 charge-power-ch settings kill-ch (format "%s Regulator" office-name))
 
-    (regulate-charge-rate home-regulator tesla-state-ch3 home-solar-data-ch2 charge-power-ch kill-ch (format "%s Regulator" home-name))
+    (regulate-charge-rate home-regulator tesla-state-ch3 home-solar-data-ch2 charge-power-ch settings kill-ch (format "%s Regulator" home-name))
 
     (record-data office-csv-recorder office-location tesla-state-ch4 office-solar-data-ch3 kill-ch (format "%s Recorder" office-name))
 
