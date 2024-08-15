@@ -38,10 +38,6 @@
       (catch Exception _)
       (catch clojure.lang.ExceptionInfo _))))
 
-(try 
-  (clojure.java.io/delete-file log-filename)
-  (catch java.io.IOException _))
-
 (defn -main
   [& args]
   (timbre/warn "[Main] Starting...")
@@ -54,8 +50,12 @@
 
         log-filename "logs.log"
 
-        (timbre/merge-config!
+        _ (timbre/merge-config!
           {:appenders {:spit (appenders/spit-appender {:fname log-filename})}})
+
+        _ (try 
+          (clojure.java.io/delete-file log-filename)
+          (catch java.io.IOException _))
 
         ntfy-channel-name (getenv "NTFY_CHANNEL_NAME")
 
