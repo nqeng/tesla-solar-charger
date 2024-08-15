@@ -30,11 +30,6 @@
       (timbre/errorf "[Main] Enviromnent variable %s is not defined" key))
     value))
 
-(def log-filename "logs.log")
-
-(timbre/merge-config!
-  {:appenders {:spit (appenders/spit-appender {:fname log-filename})}})
-
 (defn ntfy
   [channel-name message]
   (let [url (format "https://ntfy.sh/%s" channel-name)]
@@ -43,37 +38,39 @@
       (catch Exception _)
       (catch clojure.lang.ExceptionInfo _))))
 
-(def ntfy-channel-name (getenv "NTFY_CHANNEL_NAME"))
-
-(defn timbre-ntfy [data] 
-  (let [{:keys [vargs]} data
-        message (apply str vargs)]
-    (ntfy ntfy-channel-name message)))
-
-(def ntfy-appender
-  {:min-level :warn
-   :enabled? true
-   :async? true
-   :fn timbre-ntfy})
-
-(timbre/merge-config!
-  {:appenders {:ntfy ntfy-appender}})
-
 (try 
   (clojure.java.io/delete-file log-filename)
   (catch java.io.IOException _))
 
-(def settings-filepath (.getAbsolutePath (clojure.java.io/file (getenv "SETTINGS_FILEPATH"))))
-
-(def settings (duratom :local-file
-                       :file-path settings-filepath
-                       :init {}))
-
 (defn -main
   [& args]
   (timbre/warn "[Main] Starting...")
-  (let [kill-ch (chan)
+  (let [settings-filepath (.getAbsolutePath (clojure.java.io/file (getenv "SETTINGS_FILEPATH")))
+        settings (duratom :local-file
+                          :file-path settings-filepath
+                          :init {})
+        kill-ch (chan)
         shutdown-hook (fn [] (timbre/warn "[Main] Sending kill signal...") (close! kill-ch))
+
+        log-filename "logs.log"
+
+        (timbre/merge-config!
+          {:appenders {:spit (appenders/spit-appender {:fname log-filename})}})
+
+        ntfy-channel-name (getenv "NTFY_CHANNEL_NAME")
+
+        timbre-ntfy (fn [data] 
+                      (let [{:keys [vargs]} data
+                            message (apply str vargs)]
+                        (ntfy ntfy-channel-name message)))
+
+        ntfy-appender {:min-level :warn
+                       :enabled? true
+                       :async? true
+                       :fn timbre-ntfy}
+
+        _ (timbre/merge-config!
+            {:appenders {:ntfy ntfy-appender}})
 
         tesla-name (getenv "CAR_NAME")
         tesla-vin (getenv "TESLA_VIN")
@@ -146,7 +143,7 @@
         home-solar-data-ch3 (chan)
 
         charge-power-ch (chan (sliding-buffer 1))
-        
+
         office-regulator (new-TargetRegulator 
                            tesla-name 
                            office-location 

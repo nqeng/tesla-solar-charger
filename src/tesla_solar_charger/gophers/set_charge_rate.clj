@@ -25,7 +25,7 @@
 
           :let [power-watts val]
 
-          :do (infof "[%s] Setting charge rate to %.2fW..." prefix (float power-watts))
+          :do (debugf "[%s] Setting charge rate to %.2fW..." prefix (float power-watts))
 
           :let [result-ch (go (set-charge-power charge-setter power-watts))]
           :let [[val ch] (alts! [kill-ch result-ch])]
@@ -36,7 +36,7 @@
 
           (some? err) (errorf "[%s] Failed to set charge rate; %s" prefix err)
 
-          :do (infof "[%s] Successfully set charge rate" prefix)
+          :do (infof "[%s] Successfully set charge rate to %.2f" prefix (float power-watts))
 
           (recur charge-setter)))
 
