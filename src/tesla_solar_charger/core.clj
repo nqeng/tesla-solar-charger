@@ -27,7 +27,7 @@
   [key]
   (let [value (System/getenv key)]
     (when (nil? value)
-      (timbre/errorf "[Main] Enviromnent variable %s is not defined" key))
+      (timbre/errorf "[Main] Environment variable %s is not defined" key))
     value))
 
 (defn ntfy
@@ -37,6 +37,31 @@
       (client/post url {:body message})
       (catch Exception _)
       (catch clojure.lang.ExceptionInfo _))))
+
+(defn make-ntfy-appender
+  [ntfy-channel-name]
+  {:min-level :warn
+   :enabled? true
+   :async? true
+   :fn (fn [data] 
+         (let [{:keys [vargs]} data
+               message (apply str vargs)]
+           (ntfy ntfy-channel-name message)))})
+
+(defn add-ntfy-appender
+  [ntfy-channel-name]
+  (timbre/merge-config! {:appenders {:ntfy (make-ntfy-appender ntfy-channel-name)}}))
+
+(defn delete-log-file
+  [log-filepath]
+  (try 
+    (clojure.java.io/delete-file log-filepath)
+    (catch java.io.IOException _)))
+
+(defn add-spit-appender
+  [log-filename]
+  (timbre/merge-config!
+    {:appenders {:spit (appenders/spit-appender {:fname log-filename})}}))
 
 (defn -main
   [& args]
@@ -50,27 +75,13 @@
 
         log-filename "logs.log"
 
-        _ (timbre/merge-config!
-          {:appenders {:spit (appenders/spit-appender {:fname log-filename})}})
+        _ (add-spit-appender log-filename)
 
-        _ (try 
-          (clojure.java.io/delete-file log-filename)
-          (catch java.io.IOException _))
+        _ (delete-log-file log-filename)
 
         ntfy-channel-name (getenv "NTFY_CHANNEL_NAME")
 
-        timbre-ntfy (fn [data] 
-                      (let [{:keys [vargs]} data
-                            message (apply str vargs)]
-                        (ntfy ntfy-channel-name message)))
-
-        ntfy-appender {:min-level :warn
-                       :enabled? true
-                       :async? true
-                       :fn timbre-ntfy}
-
-        _ (timbre/merge-config!
-            {:appenders {:ntfy ntfy-appender}})
+        _ (add-ntfy-appender ntfy-channel-name)
 
         tesla-name (getenv "CAR_NAME")
         tesla-vin (getenv "TESLA_VIN")

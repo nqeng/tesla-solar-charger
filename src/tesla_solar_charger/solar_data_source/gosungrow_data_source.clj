@@ -43,12 +43,12 @@
   (let [config-filepath (format "%s.config.json" gosungrow-filepath)]
     (sh 
     gosungrow-filepath
-    (format "--config=%s" config-filepath)
     "config" 
     "write" 
-    (format "--appkey=%s" appkey) 
-    (format "--user=%s" username) 
-    (format "--password=%s" password))))
+    "--config" config-filepath
+    "--appkey" appkey
+    "--user" username
+    "--password" password)))
 
 (defn configure-gosungrow-executable
   [gosungrow-filepath appkey username password]
@@ -66,7 +66,7 @@
   (let [config-filepath (format "%s.config.json" gosungrow-filepath)]
   (sh
     gosungrow-filepath
-    (format "--config=%s" config-filepath)
+    "--config" config-filepath
     "data"
     "json"
     "AppService.queryMutiPointDataList" 

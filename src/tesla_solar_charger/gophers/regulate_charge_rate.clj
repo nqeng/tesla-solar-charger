@@ -27,14 +27,16 @@
 
           (= ch data-point-ch)
           (better-cond
+            :do (debugf "[%s] Received solar data" prefix)
             :let [data-point val]
-            :let [regulator (regulate-new-data-point regulator data-point charge-setter settings)]
+            :let [regulator (regulate-new-data-point regulator data-point charge-setter (deref settings))]
             (recur regulator))
 
           :else
           (better-cond
+            :do (debugf "[%s] Received car state" prefix)
             :let [car-state val]
-            :let [regulator (regulate-new-car-state regulator car-state charge-setter settings)]
+            :let [regulator (regulate-new-car-state regulator car-state charge-setter (deref settings))]
             (recur regulator))))
 
       (infof "[%s] Process ended" prefix)))))

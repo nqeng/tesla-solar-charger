@@ -16,7 +16,7 @@
     "Car is at %s (%s)"
     (:readable-location-name car-state)
     (if (:is-charging car-state) 
-      (format "charging at %.2fW" (float (:charge-power-watts car-state))) 
+      (format "charging at %.2fW (%.2f%%)" (float (:charge-power-watts car-state)) (float (:battery-percent car-state)))
       "not charging")))
 
 (defn time-after-seconds

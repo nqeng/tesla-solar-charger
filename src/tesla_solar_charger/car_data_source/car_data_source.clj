@@ -12,6 +12,7 @@
    minutes-to-full-charge
    charge-power-watts
    max-charge-power-watts
+   battery-percent
    latitude
    longitude
    readable-location-name]
@@ -23,6 +24,7 @@
    :charge-power-watts charge-power-watts
    :max-charge-power-watts max-charge-power-watts
    :charge-limit-percent charge-limit-percent
+   :battery-percent battery-percent
    :latitude latitude
    :longitude longitude
    :readable-location-name readable-location-name})

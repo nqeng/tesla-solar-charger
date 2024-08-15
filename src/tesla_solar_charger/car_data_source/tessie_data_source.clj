@@ -62,6 +62,7 @@
         is-charging (= "Charging" (get charge-state "charging_state"))
         is-override-active (true? (get vehicle-state "valet_mode"))
         charge-limit-percent (get charge-state "charge_limit_soc")
+        battery-percent (get charge-state "battery_level")
         minutes-to-full-charge (get charge-state "minutes_to_full_charge")
         charge-current-amps (get charge-state "charge_amps")
         charge-power-watts (amps-to-watts-three-phase-australia charge-current-amps)
@@ -78,6 +79,7 @@
                               minutes-to-full-charge
                               charge-power-watts
                               max-charge-power-watts
+                              battery-percent
                               latitude
                               longitude
                               readable-location-name)]

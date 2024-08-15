@@ -102,7 +102,7 @@
                 target-hour
                 target-minute
                 power-buffer-watts 
-                max-climp-watts 
+                max-climb-watts 
                 max-drop-watts]} options
         target-time (make-target-time target-hour target-minute)
         excess-power-watts (:excess-power-watts new-data-point)]
@@ -120,18 +120,18 @@
       (infof "[%s] Override is active" prefix)
 
       (should-override-to-reach-target? last-car-state target-percent target-time)
-      (infof "[%s] Automatic override active")
+      (infof "[%s] Automatic override active" prefix)
 
       (and (some? last-data-point)
            (= excess-power-watts (:excess-power-watts last-data-point)))
-      (infof "[%s] No change to excess power")
+      (infof "[%s] No change to excess power" prefix)
 
       :else
       (let [new-charge-power-watts (calc-new-charge-power-watts
                                      (:charge-power-watts last-car-state)
                                      excess-power-watts
                                      power-buffer-watts
-                                     max-climp-watts
+                                     max-climb-watts
                                      max-drop-watts)]
         (infof "[%s] Excess power is %.2fW; Car should charge at %.2fW" 
                prefix
@@ -143,13 +143,43 @@
   [car-name location options last-car-state new-car-state last-data-point charge-setter prefix]
   (let [{:keys [target-percent 
                 target-hour
-                target-minute]} options
+                target-minute
+                power-buffer-watts
+                max-climb-watts
+                max-drop-watts]} options
         target-time (make-target-time target-hour target-minute)
         is-override-active (:is-override-active new-car-state)
         max-charge-power-watts (:max-charge-power-watts new-car-state)]
     (cond
-      (nil? last-car-state)
+      (and (nil? last-data-point) (nil? last-car-state))
       (infof "[%s] No previous car state" prefix)
+
+      (nil? last-car-state)
+      (cond
+        (not (is-car-at-location? location new-car-state))
+      (infof "[%s] Car is not here" prefix)
+
+      (not (:is-charging new-car-state))
+      (infof "[%s] Car is not charging" prefix)
+
+      (:is-override-active new-car-state)
+      (infof "[%s] Override is active" prefix)
+
+      (should-override-to-reach-target? new-car-state target-percent target-time)
+      (infof "[%s] Automatic override active" prefix)
+
+      :else
+      (let [new-charge-power-watts (calc-new-charge-power-watts
+                                     (:charge-power-watts new-car-state)
+                                     (:excess-power-watts last-data-point)
+                                     power-buffer-watts
+                                     max-climb-watts
+                                     max-drop-watts)]
+        (infof "[%s] Excess power is %.2fW; Car should charge at %.2fW" 
+               prefix
+               (:excess-power-watts last-data-point)
+               new-charge-power-watts)
+        (set-charge-power charge-setter new-charge-power-watts)))
 
       (and (did-car-stop-charging? new-car-state last-car-state)
            (did-car-leave-location? location new-car-state last-car-state))
@@ -217,15 +247,15 @@
         (set-charge-power charge-setter max-charge-power-watts))
 
       :else
-      (debugf "[%s] No action"))))
+      (debugf "[%s] No action" prefix))))
 
 (def default-settings
   {:target-percent 80
    :target-hour 17
    :target-minute 0
    :power-buffer-watts 1000
-   :max-climb-watts 500
-   :max-drop-watts 500})
+   :max-climb-watts 5000
+   :max-drop-watts 5000})
 
 (defrecord TargetRegulator [car-name location last-car-state last-data-point prefix]
   IRegulator
