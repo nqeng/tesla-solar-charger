@@ -20,34 +20,6 @@
         power-factor 1.0]
     (amps-to-watts-three-phase current-amps voltage-volts power-factor)))
 
-(defn get-locationiq-reverse-geocode
-  [locationiq-auth-token latitude longitude]
-  (let [url "https://us1.locationiq.com/v1/reverse"
-        query-params {:lat (str latitude)
-                      :lon (str longitude)
-                      :format "json"
-                      :key locationiq-auth-token}
-        response (client/get url {:query-params query-params 
-                                  :accept :json})
-        json-object (json/parse-string (:body response))]
-    json-object))
-
-(defn get-readable-location-name
-  [latitude longitude locationiq-auth-token]
-  (let [json-object (get-locationiq-reverse-geocode
-                      locationiq-auth-token
-                      latitude
-                      longitude)
-        address (get json-object "address")
-        house-number (get address "house_number")
-        road (get address "road")
-        city (get address "city")
-        readable-name (format "%s%s, %s"
-                              (if (some? house-number) (format "%s " house-number) "")
-                              road
-                              city)]
-    readable-name))
-
 (defn get-latest-car-state
   [vehicle-vin tessie-auth-token locationiq-auth-token]
   (let [url (str "https://api.tessie.com/" vehicle-vin "/state")
@@ -70,7 +42,6 @@
         max-charge-power-watts (amps-to-watts-three-phase-australia max-charge-current-amps)
         latitude (get drive-state "latitude")
         longitude (get drive-state "longitude")
-        readable-location-name (get-readable-location-name latitude longitude locationiq-auth-token)
         state (make-car-state timestamp
                               is-connected
                               is-charging
@@ -81,8 +52,7 @@
                               max-charge-power-watts
                               battery-percent
                               latitude
-                              longitude
-                              readable-location-name)]
+                              longitude)]
     (when (nil? state)
       (throw (ex-info "No tessie car state" {})))
     state))

@@ -5,7 +5,6 @@
             :url "https://www.eclipse.org/legal/epl-2.0/"}
   :dependencies [
                  [com.taoensso/timbre "6.5.0"]
-                 [duratom "0.5.9"]
                  [org.clojure/clojure "1.11.1"]
                  [clj-http "3.12.3"]
                  [cheshire "5.11.0"]

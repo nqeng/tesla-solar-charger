@@ -14,8 +14,7 @@
    max-charge-power-watts
    battery-percent
    latitude
-   longitude
-   readable-location-name]
+   longitude]
   {:timestamp timestamp
    :is-connected is-connected
    :is-charging is-charging
@@ -26,6 +25,5 @@
    :charge-limit-percent charge-limit-percent
    :battery-percent battery-percent
    :latitude latitude
-   :longitude longitude
-   :readable-location-name readable-location-name})
+   :longitude longitude})
 

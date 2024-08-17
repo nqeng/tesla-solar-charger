@@ -13,8 +13,7 @@
 (defn make-car-state-message
   [car-state]
   (format
-    "Car is at %s (%s)"
-    (:readable-location-name car-state)
+    "Car is %s"
     (if (:is-charging car-state) 
       (format "charging at %.2fW (%.2f%%)" (float (:charge-power-watts car-state)) (float (:battery-percent car-state)))
       "not charging")))

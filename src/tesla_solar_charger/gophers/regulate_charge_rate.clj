@@ -7,7 +7,7 @@
     [clojure.core.async :as async :refer [close! chan alts! >! go]]))
 
 (defn regulate-charge-rate
-  [regulator car-state-ch data-point-ch charge-power-ch settings kill-ch prefix]
+  [regulator car-state-ch data-point-ch charge-power-ch kill-ch prefix]
   (let [charge-setter (new-ChannelChargeSetter charge-power-ch)]
     (close!
     (go
@@ -29,14 +29,14 @@
           (better-cond
             :do (debugf "[%s] Received solar data" prefix)
             :let [data-point val]
-            :let [regulator (regulate-new-data-point regulator data-point charge-setter (deref settings))]
+            :let [regulator (regulate-new-data-point regulator data-point charge-setter)]
             (recur regulator))
 
           :else
           (better-cond
             :do (debugf "[%s] Received car state" prefix)
             :let [car-state val]
-            :let [regulator (regulate-new-car-state regulator car-state charge-setter (deref settings))]
+            :let [regulator (regulate-new-car-state regulator car-state charge-setter)]
             (recur regulator))))
 
       (infof "[%s] Process ended" prefix)))))

@@ -36,15 +36,14 @@
 
 (defn mark-all-as-read
   [clicksend-username clicksend-api-key]
-  (client/put
-    "https://rest.clicksend.com/v3/sms/inbound-read"
-    {:basic-auth [clicksend-username clicksend-api-key]}))
+  (let [url "https://rest.clicksend.com/v3/sms/inbound-read"]
+    (client/put url {:basic-auth [clicksend-username clicksend-api-key]})))
 
 (defn mark-as-read
   [clicksend-username clicksend-api-key sms-message]
-  (client/put
-    (str "https://rest.clicksend.com/v3/sms/inbound-read/" (get sms-message "message_id"))
-    {:basic-auth [clicksend-username clicksend-api-key]}))
+  (let [message-id (get sms-message "message_id")
+        url (str "https://rest.clicksend.com/v3/sms/inbound-read/" message-id)]
+    (client/put url {:basic-auth [clicksend-username clicksend-api-key]})))
 
 (defn perform-and-return-error
   [foo]
@@ -128,8 +127,8 @@
             (recur next-poll-time))
 
           :do (debugf "[%s] Putting value on channel..." prefix)
-          :let [put-ch (onto-chan! output-ch messages)]
-          :let [[val ch] (alts! put-ch kill-ch)]
+          :let [put-ch (onto-chan! output-ch messages false)]
+          :let [[val ch] (alts! [put-ch kill-ch])]
 
           :do (close! put-ch)
 
@@ -225,6 +224,8 @@
 
     (true? (target-time trimmed settings kill-ch prefix))
     true
+    
+    :do (infof "[%s] Invalid message" prefix)
 
     :else
     false))
@@ -257,82 +258,11 @@
 
       (infof "[%s] Process ended" prefix))))
 
-#_(defrecord SetMaxClimb [set-settings-chan get-settings-chan car car-state-chan solar-sites]
+(defn process-new-sms-messages
+  [clicksend-username clicksend-api-key settings kill-ch prefix]
+  (let [new-sms-ch (chan)]
+    (fetch-new-sms-messages clicksend-username clicksend-api-key new-sms-ch kill-ch "Fetch SMS")
+    (process-sms-messages new-sms-ch settings kill-ch "Process SMS")
+    )
+  )
 
-    sms/SMSProcessor
-
-    (process-sms
-      [processor sms]
-      (try
-        (better-cond
-          :let [car-state (async/<!! car-state-chan)]
-
-          (nil? car-state)
-          (throw (ex-info "Channel closed" {}))
-
-          :let [body (get sms "body")
-                match (re-find #"^\s*[Mm]ax\s+[Cc]limb\s+(\d\d?)\s*$" body)
-                max-climb-amps (Integer/parseInt (get match 1))
-                max-climb-amps (utils/limit max-climb-amps 0 (car/get-max-charge-rate-amps car-state))]
-
-          :let [current-site (first (filter #(site/is-car-here? % car-state) solar-sites))]
-
-          (nil? current-site)
-          false
-
-          :let [settings-key (str (site/get-id current-site) (car/get-vin car))
-                settings-action (fn [settings]
-                                  (-> settings
-                                      (assoc-in [settings-key "max_climb_amps"] max-climb-amps)))]
-          (and (some? settings-action)
-               (false? (async/>!! set-settings-chan settings-action)))
-          (throw (ex-info "Channel closed" {}))
-
-          :else
-          true)
-        (catch NumberFormatException e
-          false)
-        (catch java.time.DateTimeException e
-          false)
-        (catch NullPointerException e
-          false))))
-
-#_(defrecord SetMaxDrop [set-settings-chan get-settings-chan car car-state-chan solar-sites]
-
-    sms/SMSProcessor
-
-    (process-sms
-      [processor sms]
-      (try
-        (better-cond
-          :let [car-state (async/<!! car-state-chan)]
-
-          (nil? car-state)
-          (throw (ex-info "Channel closed" {}))
-
-          :let [body (get sms "body")
-                match (re-find #"^\s*[Mm]ax\s+[Dd]rop\s+(\d\d?)\s*$" body)
-                max-climb-amps (Integer/parseInt (get match 1))
-                max-climb-amps (utils/limit max-climb-amps 0 (car/get-max-charge-rate-amps car-state))]
-
-          :let [current-site (first (filter #(site/is-car-here? % car-state) solar-sites))]
-
-          (nil? current-site)
-          false
-
-          :let [settings-key (str (site/get-id current-site) (car/get-vin car))
-                settings-action (fn [settings]
-                                  (-> settings
-                                      (assoc-in [settings-key "max_drop_amps"] max-climb-amps)))]
-          (and (some? settings-action)
-               (false? (async/>!! set-settings-chan settings-action)))
-          (throw (ex-info "Channel closed" {}))
-
-          :else
-          true)
-        (catch NumberFormatException e
-          false)
-        (catch java.time.DateTimeException e
-          false)
-        (catch NullPointerException e
-          false))))

@@ -4,15 +4,15 @@
     [clojure.tools.cli :refer [parse-opts]]
     [tesla-solar-charger.car-charge-setter.tessie-charge-setter :refer [new-TessieChargeSetter]]
     [tesla-solar-charger.gophers.process-sms-messages :refer [fetch-new-sms-messages]]
-    [tesla-solar-charger.regulator.target-regulator :refer [new-TargetRegulator]]
+    [tesla-solar-charger.regulator.simple-regulator :refer [new-SimpleRegulator]]
     [tesla-solar-charger.recorder.csv-recorder :refer [new-CSVRecorder]]
+    [tesla-solar-charger.gophers.process-sms-messages :refer [process-new-sms-messages]]
     [tesla-solar-charger.gophers.get-car-state :refer [fetch-new-car-state]]
     [tesla-solar-charger.gophers.set-charge-rate :refer [set-charge-rate]]
     [tesla-solar-charger.gophers.record-data :refer [record-data]]
     [better-cond.core :refer [cond] :rename {cond better-cond}]
     [tesla-solar-charger.utils :as utils]
     [clj-http.client :as client]
-    [duratom.core :refer [duratom]]
     [taoensso.timbre :as timbre]
     [clojure.java.io :refer [make-parents]]
     [taoensso.timbre.appenders.core :as appenders]
@@ -21,7 +21,7 @@
     [tesla-solar-charger.car-data-source.tessie-data-source :refer [new-TessieDataSource]]
     [tesla-solar-charger.solar-data-source.gosungrow-data-source :refer [new-GoSungrowDataSource]]
     [tesla-solar-charger.gophers.get-solar-data :refer [fetch-new-solar-data]]
-    [clojure.core.async :as async :refer [close! chan sliding-buffer]]))
+    [clojure.core.async :as async :refer [close! <!! chan sliding-buffer]]))
 
 (defn getenv
   [key]
@@ -66,11 +66,7 @@
 (defn -main
   [& args]
   (timbre/warn "[Main] Starting...")
-  (let [settings-filepath (.getAbsolutePath (clojure.java.io/file (getenv "SETTINGS_FILEPATH")))
-        settings (duratom :local-file
-                          :file-path settings-filepath
-                          :init {})
-        kill-ch (chan)
+  (let [kill-ch (chan)
         shutdown-hook (fn [] (timbre/warn "[Main] Sending kill signal...") (close! kill-ch))
 
         log-filename "logs.log"
@@ -155,15 +151,25 @@
 
         charge-power-ch (chan (sliding-buffer 1))
 
-        office-regulator (new-TargetRegulator 
+        office-regulator (new-SimpleRegulator 
                            tesla-name 
                            office-location 
+                           1000
+                           1000
+                           1000
                            (format "%s Regulator" office-name))
 
-        home-regulator (new-TargetRegulator 
+        home-regulator (new-SimpleRegulator 
                          tesla-name 
                          home-location 
-                         (format "%s Regulator" home-name))]
+                         1000
+                         1000
+                         1000
+                         (format "%s Regulator" home-name))
+        clicksend-username (getenv "CLICKSEND_USERNAME")
+        clicksend-api-key (getenv "CLICKSEND_API_KEY")
+
+        new-sms-ch (chan)]
 
     (.addShutdownHook (Runtime/getRuntime) (Thread. shutdown-hook))
 
@@ -177,9 +183,9 @@
 
     (fetch-new-solar-data home-solar-data-source home-solar-data-ch kill-ch (format "%s Data Source" home-name))
 
-    (regulate-charge-rate office-regulator tesla-state-ch2 office-solar-data-ch2 charge-power-ch settings kill-ch (format "%s Regulator" office-name))
+    (regulate-charge-rate office-regulator tesla-state-ch2 office-solar-data-ch2 charge-power-ch kill-ch (format "%s Regulator" office-name))
 
-    (regulate-charge-rate home-regulator tesla-state-ch3 home-solar-data-ch2 charge-power-ch settings kill-ch (format "%s Regulator" home-name))
+    (regulate-charge-rate home-regulator tesla-state-ch3 home-solar-data-ch2 charge-power-ch kill-ch (format "%s Regulator" home-name))
 
     (record-data office-csv-recorder office-location tesla-state-ch4 office-solar-data-ch3 kill-ch (format "%s Recorder" office-name))
 
@@ -187,7 +193,7 @@
 
     (set-charge-rate charge-setter charge-power-ch kill-ch "Tessie Charge Setter")
 
-    (while true)
+    (<!! kill-ch)
 
     (timbre/shutdown-appenders!)
     (shutdown-agents)))
