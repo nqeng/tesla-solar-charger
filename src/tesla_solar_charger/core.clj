@@ -3,10 +3,8 @@
   (:require
     [clojure.tools.cli :refer [parse-opts]]
     [tesla-solar-charger.car-charge-setter.tessie-charge-setter :refer [new-TessieChargeSetter]]
-    [tesla-solar-charger.gophers.process-sms-messages :refer [fetch-new-sms-messages]]
     [tesla-solar-charger.regulator.simple-regulator :refer [new-SimpleRegulator]]
     [tesla-solar-charger.recorder.csv-recorder :refer [new-CSVRecorder]]
-    [tesla-solar-charger.gophers.process-sms-messages :refer [process-new-sms-messages]]
     [tesla-solar-charger.gophers.get-car-state :refer [fetch-new-car-state]]
     [tesla-solar-charger.gophers.set-charge-rate :refer [set-charge-rate]]
     [tesla-solar-charger.gophers.record-data :refer [record-data]]
