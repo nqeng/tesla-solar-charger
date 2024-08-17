@@ -67,7 +67,7 @@
 
             (some? err) (errorf "[%s] Failed to record data; %s" prefix err)
 
-            :do (infof "[%s] Successfully recorded data" prefix)
+            :do (debugf "[%s] Successfully recorded data" prefix)
 
             (recur recorder ?last-car-state ?last-data-point)))
 

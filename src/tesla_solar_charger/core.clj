@@ -82,8 +82,7 @@
         tesla-name (getenv "CAR_NAME")
         tesla-vin (getenv "TESLA_VIN")
         tessie-auth-token (getenv "TESSIE_AUTH_TOKEN")
-        locationiq-auth-token (getenv "LOCATIONIQ_AUTH_TOKEN")
-        car-data-source (new-TessieDataSource tesla-vin tessie-auth-token locationiq-auth-token)
+        car-data-source (new-TessieDataSource tesla-vin tessie-auth-token)
         charge-setter (new-TessieChargeSetter tessie-auth-token tesla-vin)
 
         office-csv-filepath (getenv "CSV_FILEPATH")
@@ -165,11 +164,7 @@
                          1000
                          1000
                          1000
-                         (format "%s Regulator" home-name))
-        clicksend-username (getenv "CLICKSEND_USERNAME")
-        clicksend-api-key (getenv "CLICKSEND_API_KEY")
-
-        new-sms-ch (chan)]
+                         (format "%s Regulator" home-name))]
 
     (.addShutdownHook (Runtime/getRuntime) (Thread. shutdown-hook))
 

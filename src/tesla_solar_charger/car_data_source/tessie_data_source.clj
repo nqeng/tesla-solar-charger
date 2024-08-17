@@ -21,7 +21,7 @@
     (amps-to-watts-three-phase current-amps voltage-volts power-factor)))
 
 (defn get-latest-car-state
-  [vehicle-vin tessie-auth-token locationiq-auth-token]
+  [vehicle-vin tessie-auth-token]
   (let [url (str "https://api.tessie.com/" vehicle-vin "/state")
         response (client/get url {:oauth-token tessie-auth-token :accept :json})
         json (json/parse-string (:body response))
@@ -63,8 +63,7 @@
     (try
       (let [vehicle-vin (:vehicle-vin data-source)
           tessie-auth-token (:tessie-auth-token data-source)
-          locationiq-auth-token (:locationiq-auth-token data-source)
-          car-state (get-latest-car-state vehicle-vin tessie-auth-token locationiq-auth-token)]
+          car-state (get-latest-car-state vehicle-vin tessie-auth-token)]
       {:obj data-source :val car-state :err nil})
       (catch clojure.lang.ExceptionInfo err
         {:obj data-source :val nil :err err})
@@ -72,10 +71,9 @@
         {:obj data-source :val nil :err err}))))
 
 (defn new-TessieDataSource
-  [vehicle-vin tessie-auth-token locationiq-auth-token]
+  [vehicle-vin tessie-auth-token]
   (let [the-map {:vehicle-vin vehicle-vin
-                 :tessie-auth-token tessie-auth-token
-                 :locationiq-auth-token locationiq-auth-token}
+                 :tessie-auth-token tessie-auth-token}
         defaults {}]
     (map->TessieDataSource (merge defaults the-map))))
 
