@@ -73,65 +73,48 @@
 
         _ (delete-log-file log-filename)
 
-        ntfy-channel-name (getenv "NTFY_CHANNEL_NAME")
-
-        _ (add-ntfy-appender ntfy-channel-name)
-
-        tesla-name (getenv "CAR_NAME")
         tesla-vin (getenv "TESLA_VIN")
         tessie-auth-token (getenv "TESSIE_AUTH_TOKEN")
+
         car-data-source (new-TessieDataSource tesla-vin tessie-auth-token)
         charge-setter (new-TessieChargeSetter tessie-auth-token tesla-vin)
 
-        office-csv-filepath (getenv "CSV_FILEPATH")
-        office-csv-recorder (new-CSVRecorder office-csv-filepath)
+        office-csv-recorder (new-CSVRecorder "./office.csv")
+        home-csv-recorder (new-CSVRecorder "./home.csv")
 
-        home-csv-filepath (getenv "CSV_FILEPATH2")
-        home-csv-recorder (new-CSVRecorder home-csv-filepath)
-
-        gosungrow-filepath-office (getenv "GOSUNGROW_FILEPATH_OFFICE")
-        gosungrow-filepath-home (getenv "GOSUNGROW_FILEPATH_HOME")
-        gosungrow-appkey (getenv "GOSUNGROW_APPKEY")
         sungrow-username (getenv "SUNGROW_USERNAME")
         sungrow-password (getenv "SUNGROW_PASSWORD")
 
-        office-ps-key (getenv "GOSUNGROW_PS_KEY")
-        office-ps-id (getenv "GOSUNGROW_PS_ID")
-        office-excess-power-key (getenv "GOSUNGROW_EXCESS_POWER_KEY")
         office-solar-data-source (new-GoSungrowDataSource 
-                                   gosungrow-filepath-office
-                                   gosungrow-appkey 
+                                   "./GoSungrow-office"
+                                   "B0455FBE7AA0328DB57B59AA729F05D8"
                                    sungrow-username 
                                    sungrow-password 
-                                   office-ps-key 
-                                   office-ps-id 
-                                   office-excess-power-key)
+                                   "1152381"
+                                   "1152381_7_2_3"
+                                   "p8018")
 
-        home-ps-key (getenv "GOSUNGROW_PS_KEY2")
-        home-ps-id (getenv "GOSUNGROW_PS_ID2")
-        home-excess-power-key (getenv "GOSUNGROW_EXCESS_POWER_KEY2")
         home-solar-data-source (new-GoSungrowDataSource 
-                                 gosungrow-filepath-home
-                                 gosungrow-appkey 
+                                 "./GoSungrow-home"
+                                 "B0455FBE7AA0328DB57B59AA729F05D8"
                                  sungrow-username 
                                  sungrow-password 
-                                 home-ps-key 
-                                 home-ps-id 
-                                 home-excess-power-key)
+                                 "1256712"
+                                 "1256712_7_1_1"
+                                 "p8018")
 
-        office-name (getenv "LOCATION_NAME")
-        office-latitude (parse-double (getenv "LOCATION_LATITUDE"))
-        office-longitude (parse-double (getenv "LOCATION_LONGITUDE"))
+        office-latitude (parse-double (getenv "OFFICE_LATITUDE"))
+        office-longitude (parse-double (getenv "OFFICE_LONGITUDE"))
         office-location {:latitude office-latitude 
                          :longitude office-longitude 
-                         :name office-name}
+                         :name "Office"}
 
-        home-name (getenv "LOCATION_NAME2")
-        home-latitude (parse-double (getenv "LOCATION_LATITUDE2"))
-        home-longitude (parse-double (getenv "LOCATION_LONGITUDE2"))
+        home-latitude (parse-double (getenv "HOME_LATITUDE"))
+        home-longitude (parse-double (getenv "HOME_LONGITUDE"))
         home-location {:latitude home-latitude 
                        :longitude home-longitude 
-                       :name home-name}
+                       :name "Home"}
+
         tesla-state-ch (chan)
         tesla-state-ch2 (chan)
         tesla-state-ch3 (chan)
@@ -149,20 +132,20 @@
         charge-power-ch (chan (sliding-buffer 1))
 
         office-regulator (new-SimpleRegulator 
-                           tesla-name 
+                           "Tesla"
                            office-location 
                            1000
                            1000
                            1000
-                           (format "%s Regulator" office-name))
+                           "Office Regulator")
 
         home-regulator (new-SimpleRegulator 
-                         tesla-name 
+                         "Tesla"
                          home-location 
                          1000
                          1000
                          1000
-                         (format "%s Regulator" home-name))]
+                         "Home Regulator")]
 
     (.addShutdownHook (Runtime/getRuntime) (Thread. shutdown-hook))
 
@@ -172,17 +155,17 @@
 
     (fetch-new-car-state car-data-source tesla-state-ch kill-ch "Tessie Data Source")
 
-    (fetch-new-solar-data office-solar-data-source office-solar-data-ch kill-ch (format "%s Data Source" office-name))
+    (fetch-new-solar-data office-solar-data-source office-solar-data-ch kill-ch "Office Data Source")
 
-    (fetch-new-solar-data home-solar-data-source home-solar-data-ch kill-ch (format "%s Data Source" home-name))
+    (fetch-new-solar-data home-solar-data-source home-solar-data-ch kill-ch "Home Data Source")
 
-    (regulate-charge-rate office-regulator tesla-state-ch2 office-solar-data-ch2 charge-power-ch kill-ch (format "%s Regulator" office-name))
+    (regulate-charge-rate office-regulator tesla-state-ch2 office-solar-data-ch2 charge-power-ch kill-ch "Office Regulator")
 
-    (regulate-charge-rate home-regulator tesla-state-ch3 home-solar-data-ch2 charge-power-ch kill-ch (format "%s Regulator" home-name))
+    (regulate-charge-rate home-regulator tesla-state-ch3 home-solar-data-ch2 charge-power-ch kill-ch "Home Regulator")
 
-    (record-data office-csv-recorder office-location tesla-state-ch4 office-solar-data-ch3 kill-ch (format "%s Recorder" office-name))
+    (record-data office-csv-recorder office-location tesla-state-ch4 office-solar-data-ch3 kill-ch "Office Recorder")
 
-    (record-data home-csv-recorder home-location tesla-state-ch5 home-solar-data-ch3 kill-ch (format "%s Recorder" home-name))
+    (record-data home-csv-recorder home-location tesla-state-ch5 home-solar-data-ch3 kill-ch "Home Recorder")
 
     (set-charge-rate charge-setter charge-power-ch kill-ch "Tessie Charge Setter")
 
