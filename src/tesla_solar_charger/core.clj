@@ -90,8 +90,8 @@
                                    "B0455FBE7AA0328DB57B59AA729F05D8"
                                    sungrow-username 
                                    sungrow-password 
-                                   "1152381"
                                    "1152381_7_2_3"
+                                   "1152381"
                                    "p8018")
 
         home-solar-data-source (new-GoSungrowDataSource 
@@ -99,8 +99,8 @@
                                  "B0455FBE7AA0328DB57B59AA729F05D8"
                                  sungrow-username 
                                  sungrow-password 
-                                 "1256712"
                                  "1256712_7_1_1"
+                                 "1256712"
                                  "p8018")
 
         office-latitude (parse-double (getenv "OFFICE_LATITUDE"))
